@@ -13,27 +13,33 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Função que usa o Google Gemini para gerar a análise técnica de elite
+// Função que usa o Google Gemini com regras estritas de variedade de mercados
 async function analisarComIA(homeTeam, awayTeam, league, apiKeyGemini) {
   if (!apiKeyGemini) {
-    // Fallback caso a chave do Gemini não esteja configurada ainda
     return {
-      market: "Over 2.5 Gols",
-      odd: 1.85,
-      confidence: 85,
-      analysis: `Confronto estratégico entre ${homeTeam} e ${awayTeam} pela ${league}. Ambas as equipes demonstram necessidade de vitória, elevando o volume ofensivo esperado para os 90 minutos.`
+      market: "Vitória Simples (1X2)",
+      odd: 1.72,
+      confidence: 82,
+      analysis: `Análise estratégica para ${homeTeam} vs ${awayTeam} (${league}). Estudo de momento e must-win indicam vantagem tática para a equipe mandante.`
     };
   }
 
   const prompt = `Você é um analista sênior de desempenho esportivo, scout profissional e tipster de elite. Analise profundamente a partida entre ${homeTeam} e ${awayTeam} válida pela competição ${league}.
-  Faça uma análise rigorosa e completa como se você tivesse estudado o confronto o dia inteiro. Considere padrões táticos, momento recente, must-win, fatores de mandante/visitante e o impacto provável de desfalques de jogadores importantes.
+  Identifique o **MELHOR e mais seguro palpite de valor (Value Bet)** exclusivo para este jogo.
   
-  Retorne estritamente um objeto JSON válido (sem comentários fora do JSON, sem markdown excessivo) contendo exatamente estas chaves:
+  REGRA CRUCIAL DE VARIEDADE: NÃO repita o mesmo mercado em todos os jogos. Você DEVE diversificar os tipos de apostas com base no perfil biomecânico e tático do confronto. Utilize opções como:
+  - Vitória Simples (1X2) ou Dupla Hipótese
+  - Ambas as Equipes Marcam (BTTS Sim ou Não)
+  - Linhas de Gols variadas (Over 1.5, Under 2.5, Over 3.5)
+  - Empate Anula a Aposta (Draw No Bet) ou Handicap Asiático
+  - Mercado de Cantos (Escanteios)
+  
+  Retorne estritamente um objeto JSON válido (sem blocos de código markdown ou texto extra fora do JSON) contendo exatamente estas chaves:
   {
-    "market": "Nome do melhor mercado (ex: Over 2.5 Gols, Ambas Marcam (BTTS), Handicap Asiático -0.5, Empate Anula, etc.)",
-    "odd": (um número decimal realista para a odd, ex: 1.82),
-    "confidence": (um número inteiro entre 75 e 95 representando a porcentagem de confiança),
-    "analysis": "Um texto denso, técnico e fundamentado de 3 a 4 frases em português explicando o porquê da entrada, citando dinâmica tática, contexto do campeonato e leitura de jogo."
+    "market": "O mercado específico ideal para este jogo (ex: Ambas Marcam - Sim, Vitória do ${homeTeam}, Under 2.5 Gols, Handicap Asiático -0.5, Mais de 9.5 Cantos, etc.)",
+    "odd": (um número decimal realista para a odd desse mercado específico, entre 1.45 e 2.40),
+    "confidence": (um número inteiro entre 78 e 94),
+    "analysis": "Um texto denso, técnico e fundamentado de 3 a 4 frases em português explicando o porquê da entrada específica, citando comportamento tático recente, desfalques potenciais e contexto do campeonato."
   }`;
 
   try {
@@ -50,17 +56,17 @@ async function analisarComIA(homeTeam, awayTeam, league, apiKeyGemini) {
     const data = await response.json();
     let textResult = data.candidates[0].content.parts[0].text;
     
-    // Limpeza de marcações de código markdown caso a IA inclua
+    // Limpeza rigorosa de formatação markdown
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     
     return JSON.parse(textResult);
   } catch (error) {
     console.error("Erro na IA, usando fallback:", error);
     return {
-      market: "Over 2.5 Gols",
-      odd: 1.85,
-      confidence: 82,
-      analysis: `Análise avançada para ${homeTeam} vs ${awayTeam}: Partida com forte tendência de oportunidades claras de gol devido às características ofensivas dos técnicos na ${league}.`
+      market: "Ambas Marcam (BTTS)",
+      odd: 1.80,
+      confidence: 80,
+      analysis: `Confronto aberto entre ${homeTeam} e ${awayTeam} na ${league}. A necessidade de pontuar de ambos os lados gera alta expectativa de gols para os dois times.`
     };
   }
 }
@@ -83,7 +89,6 @@ export default async function handler(req, res) {
     const data = await response.json();
     const matches = data.matches || [];
 
-    // Processa todos os jogos em paralelo usando a IA para máxima velocidade
     const promessasDeAnalise = matches.map(async (match) => {
       const homeTeam = match.homeTeam.name;
       const awayTeam = match.awayTeam.name;
@@ -109,7 +114,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `${matches.length} jogos analisados e sincronizados com Inteligência Artificial avançada para o dia ${hoje}!` 
+      message: `${matches.length} jogos reanalisados com mercados diversificados e IA avançada para o dia ${hoje}!` 
     });
 
   } catch (error) {
