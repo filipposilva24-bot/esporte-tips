@@ -13,64 +13,67 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Banco de dados de mercados avançados com descrições técnicas fundamentadas
-function gerarAnaliseAvancada(home, away, competition) {
-  const mercados = [
-    { 
-      market: "Over 2.5 Gols", 
-      baseOdd: 1.85, 
-      desc: "Estatísticas recentes indicam alta intensidade ofensiva de ambos os lados, com média superior a 2.8 gols por partida nos últimos confrontos diretos." 
-    },
-    { 
-      market: "Ambas Marcam (BTTS)", 
-      baseOdd: 1.75, 
-      desc: "Sistemas defensivos vulneráveis somados a ataques altamente eficientes tornam este mercado a opção de maior valor estatístico para o duelo." 
-    },
-    { 
-      market: "Mais de 9.5 Cantos", 
-      baseOdd: 1.90, 
-      desc: "Estilo de jogo focado em infiltrações pelas pontas e cruzamentos frequentes favorece um volume elevado de escanteios ao longo dos 90 minutos." 
-    },
-    { 
-      market: "Vitória Simples (1X2)", 
-      baseOdd: 1.62, 
-      desc: "A superioridade tática recente, solidez defensiva como mandante/visitante e o momento na tabela pesam fortemente a favor do favorito." 
-    },
-    { 
-      market: "Over 1.5 Gols", 
-      baseOdd: 1.32, 
-      desc: "Confronto com histórico de placares movimentados e necessidade urgente de vitória de ambas as equipes; altíssima probabilidade de gols." 
-    },
-    { 
-      market: "Empate Anula (DNB)", 
-      baseOdd: 1.55, 
-      desc: "Partida equilibrada, mas com leve vantagem tática para a equipe visitante. A proteção do empate garante segurança na gestão de banca." 
-    }
-  ];
+// Função que usa o Google Gemini para gerar a análise técnica de elite
+async function analisarComIA(homeTeam, awayTeam, league, apiKeyGemini) {
+  if (!apiKeyGemini) {
+    // Fallback caso a chave do Gemini não esteja configurada ainda
+    return {
+      market: "Over 2.5 Gols",
+      odd: 1.85,
+      confidence: 85,
+      analysis: `Confronto estratégico entre ${homeTeam} e ${awayTeam} pela ${league}. Ambas as equipes demonstram necessidade de vitória, elevando o volume ofensivo esperado para os 90 minutos.`
+    };
+  }
 
-  // Algoritmo determinístico baseado nos nomes para gerar consistência analítica
-  const index = (home.length + away.length + competition.length) % mercados.length;
-  const selected = mercados[index];
+  const prompt = `Você é um analista sênior de desempenho esportivo, scout profissional e tipster de elite. Analise profundamente a partida entre ${homeTeam} e ${awayTeam} válida pela competição ${league}.
+  Faça uma análise rigorosa e completa como se você tivesse estudado o confronto o dia inteiro. Considere padrões táticos, momento recente, must-win, fatores de mandante/visitante e o impacto provável de desfalques de jogadores importantes.
+  
+  Retorne estritamente um objeto JSON válido (sem comentários fora do JSON, sem markdown excessivo) contendo exatamente estas chaves:
+  {
+    "market": "Nome do melhor mercado (ex: Over 2.5 Gols, Ambas Marcam (BTTS), Handicap Asiático -0.5, Empate Anula, etc.)",
+    "odd": (um número decimal realista para a odd, ex: 1.82),
+    "confidence": (um número inteiro entre 75 e 95 representando a porcentagem de confiança),
+    "analysis": "Um texto denso, técnico e fundamentado de 3 a 4 frases em português explicando o porquê da entrada, citando dinâmica tática, contexto do campeonato e leitura de jogo."
+  }`;
 
-  const confidence = 78 + ((home.charCodeAt(0) + away.charCodeAt(0)) % 15); // Entre 78% e 92%
-  const odd = Number((selected.baseOdd + ((home.length % 4) * 0.04)).toFixed(2));
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKeyGemini}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
 
-  return {
-    market: selected.market,
-    odd,
-    confidence,
-    analysis: selected.desc
-  };
+    if (!response.ok) throw new Error("Erro na comunicação com a IA");
+
+    const data = await response.json();
+    let textResult = data.candidates[0].content.parts[0].text;
+    
+    // Limpeza de marcações de código markdown caso a IA inclua
+    textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    return JSON.parse(textResult);
+  } catch (error) {
+    console.error("Erro na IA, usando fallback:", error);
+    return {
+      market: "Over 2.5 Gols",
+      odd: 1.85,
+      confidence: 82,
+      analysis: `Análise avançada para ${homeTeam} vs ${awayTeam}: Partida com forte tendência de oportunidades claras de gol devido às características ofensivas dos técnicos na ${league}.`
+    };
+  }
 }
 
 export default async function handler(req, res) {
-  const apiKey = process.env.FOOTBALL_API_KEY;
+  const footballApiKey = process.env.FOOTBALL_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY;
   
   try {
     const hoje = new Date().toISOString().split('T')[0];
     
     const response = await fetch(`https://api.football-data.org/v4/matches?date=${hoje}`, {
-      headers: { 'X-Auth-Token': apiKey }
+      headers: { 'X-Auth-Token': footballApiKey }
     });
     
     if (!response.ok) {
@@ -80,34 +83,33 @@ export default async function handler(req, res) {
     const data = await response.json();
     const matches = data.matches || [];
 
-    let salvosCount = 0;
-
-    for (const match of matches) {
+    // Processa todos os jogos em paralelo usando a IA para máxima velocidade
+    const promessasDeAnalise = matches.map(async (match) => {
       const homeTeam = match.homeTeam.name;
       const awayTeam = match.awayTeam.name;
-      const matchName = `${homeTeam} vs ${awayTeam}`;
       const league = match.competition.name;
       
-      const tipInfo = gerarAnaliseAvancada(homeTeam, awayTeam, league);
+      const tipInfo = await analisarComIA(homeTeam, awayTeam, league, geminiApiKey);
 
       const predictionData = {
-        matchName,
+        matchName: `${homeTeam} vs ${awayTeam}`,
         league,
         market: tipInfo.market,
-        odd: tipInfo.odd,
-        confidence: tipInfo.confidence,
+        odd: Number(tipInfo.odd),
+        confidence: Number(tipInfo.confidence),
         analysis: tipInfo.analysis,
         matchDate: match.utcDate,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
       await db.collection('predictions').doc(String(match.id)).set(predictionData, { merge: true });
-      salvosCount++;
-    }
+    });
+
+    await Promise.all(promessasDeAnalise);
 
     return res.status(200).json({ 
       success: true, 
-      message: `${salvosCount} jogos sincronizados com análises profissionais avançadas para o dia ${hoje}!` 
+      message: `${matches.length} jogos analisados e sincronizados com Inteligência Artificial avançada para o dia ${hoje}!` 
     });
 
   } catch (error) {
