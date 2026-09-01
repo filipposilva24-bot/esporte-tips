@@ -3,8 +3,17 @@ import admin from 'firebase-admin';
 if (!admin.apps.length) {
   let rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || '';
   
-  // Trata quebras de linha literais ou perdidas na Vercel
-  let formattedKey = rawPrivateKey.replace(/\\n/g, '\n');
+  // Remove aspas caso tenham sido colocadas acidentalmente no painel da Vercel
+  rawPrivateKey = rawPrivateKey.trim();
+  if ((rawPrivateKey.startsWith('"') && rawPrivateKey.endsWith('"')) || (rawPrivateKey.startsWith("'") && rawPrivateKey.endsWith("'"))) {
+    rawPrivateKey = rawPrivateKey.slice(1, -1);
+  }
+
+  // Normaliza as quebras de linha da chave privada
+  let formattedKey = rawPrivateKey
+    .replace(/\\\\n/g, '\n')
+    .replace(/\\n/g, '\n');
+
   if (!formattedKey.includes('\n') && formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
     const base64 = formattedKey
       .replace('-----BEGIN PRIVATE KEY-----', '')
