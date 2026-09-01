@@ -1,11 +1,24 @@
 import admin from 'firebase-admin';
 
 if (!admin.apps.length) {
+  let rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || '';
+  
+  // Trata quebras de linha literais ou perdidas na Vercel
+  let formattedKey = rawPrivateKey.replace(/\\n/g, '\n');
+  if (!formattedKey.includes('\n') && formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    const base64 = formattedKey
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .replace(/\s+/g, '');
+    const chunked = base64.match(/.{1,64}/g).join('\n');
+    formattedKey = `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----\n`;
+  }
+
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      privateKey: formattedKey,
     }),
   });
 }
@@ -13,11 +26,6 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 export default async function handler(req, res) {
-  const authHeader = req.headers.authorization;
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   const apiKey = process.env.FOOTBALL_API_KEY;
   
   try {
