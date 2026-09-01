@@ -29,8 +29,8 @@ if (bankrollInput) {
     });
 }
 
-// 2. Carregar Palpites do Firebase Firestore
-async function loadPredictions() {
+// 2. Carregar Palpites do Firebase Firestore com Suporte a Filtro
+async function loadPredictions(selectedMarket = 'todos') {
     const container = document.getElementById('tips-container');
     if (!container) return;
     
@@ -38,13 +38,17 @@ async function loadPredictions() {
         const querySnapshot = await getDocs(collection(db, "predictions"));
         container.innerHTML = "";
         
-        if (querySnapshot.empty) {
-            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Nenhum jogo sincronizado para hoje. Aguarde a atualização automática.</p>`;
-            return;
-        }
+        let count = 0;
 
         querySnapshot.forEach((doc) => {
             const tip = doc.data();
+            
+            // Aplica o filtro de mercado se não for 'todos'
+            if (selectedMarket !== 'todos' && tip.market !== selectedMarket) {
+                return; // Pula os jogos que não batem com o filtro selecionado
+            }
+
+            count++;
             const card = document.createElement('div');
             card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hover:border-emerald-500/40 transition-all";
             card.innerHTML = `
@@ -66,11 +70,27 @@ async function loadPredictions() {
             `;
             container.appendChild(card);
         });
+
+        if (count === 0) {
+            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Nenhum jogo encontrado para este mercado específico.</p>`;
+        }
+
     } catch (error) {
         console.error("Erro ao carregar dados do Firebase: ", error);
         container.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Erro ao conectar com o banco de dados.</p>`;
     }
 }
 
-// Executa ao carregar a página
-loadPredictions();
+// 3. Configurar Evento do Filtro e Carregamento Inicial
+document.addEventListener("DOMContentLoaded", () => {
+    const marketFilter = document.getElementById('marketFilter');
+    
+    if (marketFilter) {
+        marketFilter.addEventListener('change', (e) => {
+            loadPredictions(e.target.value);
+        });
+    }
+    
+    // Carrega todos os palpites inicialmente ao abrir a página
+    loadPredictions("todos");
+});
