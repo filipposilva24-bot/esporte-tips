@@ -39,9 +39,22 @@
 
         <!-- Seção de Palpites do Dia -->
         <section>
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-3">
                 <h2 class="text-base font-bold text-white">🔥 Melhores Palpites do Dia</h2>
                 <span class="text-xs text-slate-400">Ao Vivo / Pré-live</span>
+            </div>
+
+            <!-- Filtro de Mercados -->
+            <div class="mb-4">
+                <select id="marketFilter" class="w-full bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl p-2.5 focus:outline-none focus:border-emerald-500 transition-all font-semibold">
+                    <option value="todos">🔍 Todos os Mercados</option>
+                    <option value="Over 2.5 Gols">Over 2.5 Gols</option>
+                    <option value="Ambas Marcam (BTTS)">Ambas Marcam (BTTS)</option>
+                    <option value="Mais de 9.5 Cantos">Mais de 9.5 Cantos</option>
+                    <option value="Over 1.5 Gols">Over 1.5 Gols</option>
+                    <option value="Empate Anula (Casa)">Empate Anula (Casa)</option>
+                    <option value="Handicap Asiático -0.5">Handicap Asiático -0.5</option>
+                </select>
             </div>
 
             <!-- Feed onde os jogos sincronizados vão aparecer automaticamente -->
