@@ -1,8 +1,6 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyAd0jnevrRoRT5vdI_xGZuAxDLgRTCfkzY",
     authDomain: "futtips-7b09f.firebaseapp.com",
@@ -13,23 +11,22 @@ const firebaseConfig = {
     measurementId: "G-VYP83JBLSN"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 1. Calculadora de Banca em Tempo Real
+// 1. Calculadora de Banca Avançada
 const bankrollInput = document.getElementById('bankroll');
 const stakeResult = document.getElementById('stake-result');
 
 if (bankrollInput) {
     bankrollInput.addEventListener('input', (e) => {
         const value = parseFloat(e.target.value) || 0;
-        const recommendedStake = value * 0.02; // Padrão de 2% da banca
+        const recommendedStake = value * 0.02; // Gestão profissional de 2%
         stakeResult.textContent = `R$ ${recommendedStake.toFixed(2)}`;
     });
 }
 
-// 2. Carregar Palpites do Firebase Firestore com Suporte a Filtro
+// 2. Carregar Palpites com Análise Técnica no Feed
 async function loadPredictions(selectedMarket = 'todos') {
     const container = document.getElementById('tips-container');
     if (!container) return;
@@ -43,45 +40,53 @@ async function loadPredictions(selectedMarket = 'todos') {
         querySnapshot.forEach((doc) => {
             const tip = doc.data();
             
-            // Aplica o filtro de mercado se não for 'todos'
             if (selectedMarket !== 'todos' && tip.market !== selectedMarket) {
-                return; // Pula os jogos que não batem com o filtro selecionado
+                return;
             }
 
             count++;
             const card = document.createElement('div');
-            card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hover:border-emerald-500/40 transition-all";
+            card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hover:border-emerald-500/50 transition-all space-y-3";
             card.innerHTML = `
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-slate-800 text-slate-300 rounded">${tip.league || 'Futebol'}</span>
-                    <span class="text-emerald-400 font-bold text-xs">Confiança: ${tip.confidence || '80'}%</span>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">${tip.league || 'Futebol'}</span>
+                    <span class="text-emerald-400 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confiança: ${tip.confidence || '85'}%</span>
                 </div>
-                <h3 class="text-base font-bold text-white mb-1">${tip.matchName}</h3>
-                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/80 mt-3 flex justify-between items-center">
+                
+                <h3 class="text-base font-extrabold text-white tracking-tight">${tip.matchName}</h3>
+                
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 flex justify-between items-center">
                     <div>
-                        <p class="text-[11px] text-slate-400">Sugestão de Entrada</p>
-                        <p class="text-emerald-400 font-bold text-sm">${tip.market || 'Analítica'}</p>
+                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sugestão de Entrada</p>
+                        <p class="text-emerald-400 font-black text-sm mt-0.5">${tip.market || 'Análise Padrão'}</p>
                     </div>
                     <div class="text-right">
-                        <p class="text-[11px] text-slate-400">Odd Média</p>
-                        <p class="text-white font-extrabold text-base">@${Number(tip.odd || 1.85).toFixed(2)}</p>
+                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Odd Média</p>
+                        <p class="text-white font-black text-base mt-0.5">@${Number(tip.odd || 1.85).toFixed(2)}</p>
                     </div>
+                </div>
+
+                <!-- Bloco de Análise Técnica / Justificativa do Especialista -->
+                <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/50">
+                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                        <span class="text-emerald-400 font-bold">💡 Análise Técnica:</span> ${tip.analysis || 'Estatísticas favoráveis para este mercado com base no momento atual das equipes.'}
+                    </p>
                 </div>
             `;
             container.appendChild(card);
         });
 
         if (count === 0) {
-            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Nenhum jogo encontrado para este mercado específico.</p>`;
+            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum palpite encontrado para este filtro específico hoje.</p>`;
         }
 
     } catch (error) {
         console.error("Erro ao carregar dados do Firebase: ", error);
-        container.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Erro ao conectar com o banco de dados.</p>`;
+        container.innerHTML = `<p class="text-xs text-red-400 text-center py-6">Erro ao conectar com o banco de dados.</p>`;
     }
 }
 
-// 3. Configurar Evento do Filtro e Carregamento Inicial
+// 3. Inicialização e Evento do Filtro
 document.addEventListener("DOMContentLoaded", () => {
     const marketFilter = document.getElementById('marketFilter');
     
@@ -91,6 +96,5 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     
-    // Carrega todos os palpites inicialmente ao abrir a página
     loadPredictions("todos");
 });
