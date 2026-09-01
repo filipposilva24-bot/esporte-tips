@@ -1,39 +1,16 @@
 import admin from 'firebase-admin';
 
 if (!admin.apps.length) {
-  let rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || '';
-  
-  // Remove aspas acidentais
-  rawPrivateKey = rawPrivateKey.trim();
-  if ((rawPrivateKey.startsWith('"') && rawPrivateKey.endsWith('"')) || (rawPrivateKey.startsWith("'") && rawPrivateKey.endsWith("'"))) {
-    rawPrivateKey = rawPrivateKey.slice(1, -1);
-  }
-
-  let formattedKey = rawPrivateKey;
   try {
-    // Extrai apenas o conteúdo base64 limpo (removendo cabeçalhos, rodapés e qualquer quebra de linha errada)
-    const cleanBase64 = rawPrivateKey
-      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-      .replace(/-----END PRIVATE KEY-----/g, '')
-      .replace(/\\n/g, '')
-      .replace(/\n/g, '')
-      .replace(/\r/g, '')
-      .replace(/\s+/g, '');
-
-    // Reconstrói a chave no formato PEM exato exigido pelo Node.js/Firebase
-    const chunked = cleanBase64.match(/.{1,64}/g).join('\n');
-    formattedKey = `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----\n`;
-  } catch (e) {
-    console.error("Erro ao formatar chave:", e);
+    // Lê o JSON inteiro de uma vez só, ignorando os bugs de formatação da Vercel
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+  } catch (error) {
+    console.error("Erro fatal ao carregar as credenciais:", error);
   }
-
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: formattedKey,
-    }),
-  });
 }
 
 const db = admin.firestore();
