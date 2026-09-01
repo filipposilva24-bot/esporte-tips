@@ -3,24 +3,28 @@ import admin from 'firebase-admin';
 if (!admin.apps.length) {
   let rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || '';
   
-  // Remove aspas caso tenham sido colocadas acidentalmente no painel da Vercel
+  // Remove aspas acidentais
   rawPrivateKey = rawPrivateKey.trim();
   if ((rawPrivateKey.startsWith('"') && rawPrivateKey.endsWith('"')) || (rawPrivateKey.startsWith("'") && rawPrivateKey.endsWith("'"))) {
     rawPrivateKey = rawPrivateKey.slice(1, -1);
   }
 
-  // Normaliza as quebras de linha da chave privada
-  let formattedKey = rawPrivateKey
-    .replace(/\\\\n/g, '\n')
-    .replace(/\\n/g, '\n');
-
-  if (!formattedKey.includes('\n') && formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
-    const base64 = formattedKey
-      .replace('-----BEGIN PRIVATE KEY-----', '')
-      .replace('-----END PRIVATE KEY-----', '')
+  let formattedKey = rawPrivateKey;
+  try {
+    // Extrai apenas o conteúdo base64 limpo (removendo cabeçalhos, rodapés e qualquer quebra de linha errada)
+    const cleanBase64 = rawPrivateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+      .replace(/-----END PRIVATE KEY-----/g, '')
+      .replace(/\\n/g, '')
+      .replace(/\n/g, '')
+      .replace(/\r/g, '')
       .replace(/\s+/g, '');
-    const chunked = base64.match(/.{1,64}/g).join('\n');
+
+    // Reconstrói a chave no formato PEM exato exigido pelo Node.js/Firebase
+    const chunked = cleanBase64.match(/.{1,64}/g).join('\n');
     formattedKey = `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----\n`;
+  } catch (e) {
+    console.error("Erro ao formatar chave:", e);
   }
 
   admin.initializeApp({
