@@ -73,7 +73,7 @@ export default async function handler(req, res) {
   try {
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     
-    const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}`, {
+    const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, {
       headers: { 'x-apisports-key': apiFootballKey }
     });
     
