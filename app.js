@@ -1,23 +1,23 @@
 let todasAsPredicoes = [];
 
-// Dicionário para associar países às suas respectivas bandeiras
+// Dicionário limpo para associar países a ícones profissionais (sem caracteres ocultos)
 const bandeirasPaises = {
-  "Brazil": "🇧🇷 Brasil",
-  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra",
-  "Spain": "🇪🇸 Espanha",
-  "Italy": "🇮🇹 Itália",
-  "Germany": "🇩🇪 Alemanha",
-  "France": "🇫🇷 França",
-  "Portugal": "🇵🇹 Portugal",
-  "Netherlands": "🇳🇱 Holanda",
-  "Argentina": "🇦🇷 Argentina",
+  "Brazil": "⚽ Brasil",
+  "England": "⚽ Inglaterra",
+  "Spain": "⚽ Espanha",
+  "Italy": "⚽ Itália",
+  "Germany": "⚽ Alemanha",
+  "France": "⚽ França",
+  "Portugal": "⚽ Portugal",
+  "Netherlands": "⚽ Holanda",
+  "Argentina": "⚽ Argentina",
   "International": "🏆 Internacional",
   "World": "🌍 Mundo"
 };
 
 function obterBandeiraPais(pais) {
-  if (!pais) return "🏳️ Geral";
-  return bandeirasPaises[pais] || `🏳️ ${pais}`;
+  if (!pais) return "⚽ Geral";
+  return bandeirasPaises[pais] || `⚽ ${pais}`;
 }
 
 window.toggleCriarAposta = function(cardId) {
