@@ -1,200 +1,54 @@
-// Configuração real do Firebase para o projeto FutTips
-const firebaseConfig = {
-  apiKey: "AIzaSyAd0jnevrRoRT5vdI_xGZuAxDLgRTCfkzY",
-  authDomain: "futtips-7b09f.firebaseapp.com",
-  projectId: "futtips-7b09f",
-  storageBucket: "futtips-7b09f.firebasestorage.app",
-  messagingSenderId: "321560814934",
-  appId: "1:321560814934:web:db7d4226f712a2a7e3e2f7",
-  measurementId: "G-VYP83JBLSN"
-};
+// Exemplo de como estruturar o card dentro do seu loop de exibição no app.js
+predictions.forEach(pred => {
+  const cardId = pred.id || Math.random().toString(36).substring(7);
+  
+  // Verifica se o Criar Aposta existe nos dados vindos do Firebase
+  const temCriarAposta = pred.criarApostaMarket ? true : false;
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.firestore();
+  const cardHTML = `
+    <div class="prediction-card" style="background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      
+      <!-- Cabeçalho do Jogo e Tag da Casa -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span style="font-size: 0.85rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px;">${pred.league}</span>
+        <span style="font-size: 0.85rem; font-weight: bold; background: #059669; padding: 2px 8px; border-radius: 4px;">${pred.bookmaker || 'Bet365'}</span>
+      </div>
 
-let allPredictions = [];
+      <h3 style="font-size: 1.1rem; margin-bottom: 12px; font-weight: bold;">${pred.matchName}</h3>
 
-// Elementos da DOM
-const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-const dateFilterInput = document.getElementById('dateFilter');
-const countryFilter = document.getElementById('countryFilter');
-const leagueFilter = document.getElementById('leagueFilter');
-const bookmakerFilter = document.getElementById('bookmakerFilter');
-const bankrollInput = document.getElementById('bankrollInput');
-const suggestedStake = document.getElementById('suggestedStake');
-const container = document.getElementById('predictionsContainer');
-const matchCount = document.getElementById('matchCount');
+      <!-- APOSTA PRINCIPAL (O Padrão Antigo) -->
+      <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="color: #38bdf8; font-weight: bold; font-size: 0.95rem;">🎯 Principal: ${pred.market}</span>
+          <span style="color: #f59e0b; font-weight: bold; font-size: 1.1rem;">@${pred.odd}</span>
+        </div>
+        <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4;">${pred.analysis}</p>
+      </div>
 
-// Inicializa o input com a data de hoje e escuta mudanças
-if (dateFilterInput) {
-  dateFilterInput.value = hojeStr;
-  dateFilterInput.addEventListener('change', (e) => {
-    carregarPalpitesPorData(e.target.value);
-  });
-}
+      <!-- SEGUNDA OPÇÃO: BOTÃO CRIAR APOSTA (ATÉ 2.00) -->
+      ${temCriarAposta ? `
+        <div style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 10px; margin-top: 10px;">
+          <button onclick="toggleCriarAposta('${cardId}')" style="width: 100%; background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 0.9rem;">
+            ⚡ Sugestão de Criar Aposta (Até 2.00)
+          </button>
+          
+          <div id="criar-aposta-${cardId}" style="display: none; margin-top: 8px; background: rgba(37, 99, 235, 0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(37, 99, 235, 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="color: #60a5fa; font-weight: bold; font-size: 0.9rem;">${pred.criarApostaMarket}</span>
+              <span style="color: #f59e0b; font-weight: bold; font-size: 1rem;">@${pred.criarApostaOdd}</span>
+            </div>
+            <p style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.3;">${pred.criarApostaAnalysis}</p>
+          </div>
+        </div>
+      ` : ''}
 
-// Gestão de banca em tempo real
-if (bankrollInput) {
-  bankrollInput.addEventListener('input', (e) => {
-    const bankroll = parseFloat(e.target.value) || 0;
-    const stake = bankroll * 0.02;
-    suggestedStake.textContent = `R$ ${stake.toFixed(2)}`;
-  });
-}
+      <!-- Confiança da IA -->
+      <div style="margin-top: 10px; text-align: right; font-size: 0.8rem; color: #94a3b8;">
+        Confiança da IA: <strong style="color: #10b981;">${pred.confidence}%</strong>
+      </div>
 
-// Carregamento inicial ao abrir o app
-window.addEventListener('DOMContentLoaded', () => {
-  carregarPalpitesPorData(hojeStr);
-});
-
-// Busca palpites do Firebase filtrando pela data selecionada com fuso do Brasil
-async function carregarPalpitesPorData(dataAlvo) {
-  container.innerHTML = `
-    <div class="col-span-full text-center py-16">
-      <p class="text-slate-400 text-sm animate-pulse">Buscando análises para ${dataAlvo}...</p>
     </div>
   `;
   
-  try {
-    const snapshot = await db.collection('predictions').get();
-    allPredictions = [];
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.matchDate) {
-        const dataJogoLocal = new Date(data.matchDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-        
-        if (dataJogoLocal === dataAlvo) {
-          // Se o documento não tiver uma casa definida, atribuímos uma rotação padrão entre as 3 principais para demonstração
-          const casasPadrao = ["Bet365", "Betano", "Superbet"];
-          const casaDefinitiva = data.bookmaker || casasPadrao[Math.abs(doc.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % casasPadrao.length];
-          
-          allPredictions.push({ id: doc.id, ...data, bookmaker: casaDefinitiva });
-        }
-      }
-    });
-
-    povoarFiltros(allPredictions);
-    aplicarFiltros();
-
-  } catch (error) {
-    console.error("Erro ao carregar histórico:", error);
-    container.innerHTML = `
-      <div class="col-span-full text-center py-16 bg-slate-900/40 rounded-2xl border border-slate-800">
-        <p class="text-red-400 text-sm">Erro ao carregar os dados. Verifique a conexão com o Firebase.</p>
-      </div>
-    `;
-  }
-}
-
-// Popula os selects dinamicamente
-function povoarFiltros(predictions) {
-  const paises = [...new Set(predictions.map(p => p.country))].filter(Boolean).sort();
-  const ligas = [...new Set(predictions.map(p => p.league))].filter(Boolean).sort();
-
-  countryFilter.innerHTML = '<option value="">🌍 Todos os Países</option>';
-  paises.forEach(pais => {
-    countryFilter.innerHTML += `<option value="${pais}">${pais}</option>`;
-  });
-
-  leagueFilter.innerHTML = '<option value="">🏆 Todas as Ligas</option>';
-  ligas.forEach(liga => {
-    leagueFilter.innerHTML += `<option value="${liga}">${liga}</option>`;
-  });
-}
-
-countryFilter.addEventListener('change', aplicarFiltros);
-leagueFilter.addEventListener('change', aplicarFiltros);
-if (bookmakerFilter) {
-  bookmakerFilter.addEventListener('change', aplicarFiltros);
-}
-
-// Aplica os filtros combinados (País, Liga e Casa de Aposta)
-function aplicarFiltros() {
-  const paisSelecionado = countryFilter.value;
-  const ligaSelecionada = leagueFilter.value;
-  const casaSelecionada = bookmakerFilter ? bookmakerFilter.value : '';
-
-  const filtrados = allPredictions.filter(p => {
-    const matchPais = !paisSelecionado || p.country === paisSelecionado;
-    const matchLiga = !ligaSelecionada || p.league === ligaSelecionada;
-    const matchCasa = !casaSelecionada || p.bookmaker === casaSelecionada;
-    return matchPais && matchLiga && matchCasa;
-  });
-
-  renderizarCards(filtrados);
-}
-
-// Renderiza os cards de palpites na tela
-function renderizarCards(predictions) {
-  matchCount.textContent = `${predictions.length} jogos encontrados`;
-
-  if (predictions.length === 0) {
-    container.innerHTML = `
-      <div class="col-span-full text-center py-16 bg-slate-900/40 rounded-2xl border border-slate-800">
-        <p class="text-slate-400 text-sm font-medium">Nenhum palpite encontrado para esta casa ou filtro.</p>
-        <p class="text-slate-500 text-xs mt-1">Tente selecionar outra casa de aposta ou data acima.</p>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = predictions.map(p => {
-    const horaMatch = p.matchDate ? new Date(p.matchDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
-    
-    // Cores personalizadas para a tag da casa de aposta
-    let corCasa = "bg-amber-500/10 text-amber-400 border-amber-500/20";
-    if (p.bookmaker === "Betano") corCasa = "bg-red-500/10 text-red-400 border-red-500/20";
-    if (p.bookmaker === "Superbet") corCasa = "bg-purple-500/10 text-purple-400 border-purple-500/20";
-
-    return `
-      <div class="bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 flex flex-col justify-between shadow-xl transition">
-        <div>
-          <!-- Cabeçalho do Card -->
-          <div class="flex items-center justify-between text-xs text-slate-400 mb-3">
-            <span class="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50 font-medium text-slate-300">${p.league}</span>
-            <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded-md border text-[10px] font-bold ${corCasa}">${p.bookmaker}</span>
-              <span class="font-mono bg-slate-950 px-2 py-0.5 rounded text-amber-400 font-semibold">${horaMatch}</span>
-            </div>
-          </div>
-
-          <!-- Times -->
-          <h4 class="text-base font-bold text-slate-100 mb-4">${p.matchName}</h4>
-
-          <!-- Mercado e Odd -->
-          <div class="bg-slate-950/70 border border-slate-800/60 rounded-xl p-3.5 mb-4 flex items-center justify-between">
-            <div>
-              <span class="text-[10px] uppercase tracking-wider text-slate-400 block font-medium">Mercado Sugerido</span>
-              <span class="text-sm font-extrabold text-emerald-400">${p.market}</span>
-            </div>
-            <div class="text-right">
-              <span class="text-[10px] uppercase tracking-wider text-slate-400 block font-medium">Odd Média</span>
-              <span class="text-lg font-black text-amber-400">@${Number(p.odd).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <!-- Análise Tática -->
-          <div class="space-y-1 mb-4">
-            <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-              🧠 Análise Tática:
-            </span>
-            <p class="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-3 rounded-xl border border-slate-800/40">
-              ${p.analysis}
-            </p>
-          </div>
-        </div>
-
-        <!-- Rodapé do Card (Confiança) -->
-        <div class="pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs">
-          <span class="text-slate-400 font-medium">Confiança da IA</span>
-          <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg font-bold">
-            ${p.confidence}%
-          </span>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
+  document.getElementById('predictions-container').innerHTML += cardHTML;
+});
