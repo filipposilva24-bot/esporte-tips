@@ -1,100 +1,176 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FUTTIPS - Análises Táticas de Elite</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FutTips - Análises Táticas de Elite</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 800px;
+      margin: 0 auto 24px auto;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f59e0b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-badge {
+      background: #059669;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .prediction-card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+      border: 1px solid #334155;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .league-tag {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      background: #0f172a;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .bookmaker-tag {
+      font-size: 0.8rem;
+      font-weight: bold;
+      background: #059669;
+      color: white;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .match-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffffff;
+    }
+    .main-market-box {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      border-left: 4px solid #38bdf8;
+    }
+    .market-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .market-name {
+      color: #38bdf8;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .market-odd {
+      color: #f59e0b;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .market-analysis {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+    .criar-aposta-section {
+      border-top: 1px dashed rgba(255, 255, 255, 0.15);
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    .criar-aposta-btn {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .criar-aposta-btn:hover {
+      background: #1d4ed8;
+    }
+    .criar-aposta-content {
+      display: none;
+      margin-top: 10px;
+      background: rgba(37, 99, 235, 0.08);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(37, 99, 235, 0.3);
+    }
+    .card-footer {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .confidence-badge {
+      color: #10b981;
+      font-weight: 700;
+    }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
-    
-    <!-- Header -->
-    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="text-amber-400 text-xl font-black italic tracking-wider">⚡ FUTTIPS</span>
-            </div>
-            <div class="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-semibold">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Online
-            </div>
-        </div>
-    </header>
+<body>
 
-    <!-- Main Content -->
-    <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
-        
-        <!-- Bankroll Management -->
-        <section class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl">
-            <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
-                💰 Gestão de Banca Rápida
-            </h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Sua Banca (R$)</label>
-                    <input type="number" id="bankrollInput" value="100" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400 transition">
-                </div>
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Stake Sugerida (2%)</label>
-                    <div id="suggestedStake" class="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-2.5 text-emerald-400 font-bold text-lg flex items-center">
-                        R$ 2.00
-                    </div>
-                </div>
-            </div>
-        </section>
+  <header>
+    <div class="logo">⚡ FUTTIPS</div>
+    <div class="status-badge">● Online</div>
+  </header>
 
-        <!-- Filters Bar -->
-        <section class="flex flex-wrap items-center gap-3 bg-slate-900/40 p-3 rounded-2xl border border-slate-800/80">
-            <!-- Seletor de Histórico por Data -->
-            <div class="flex items-center gap-2 bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-700">
-                <span class="text-xs text-slate-400 font-medium">Data:</span>
-                <input type="date" id="dateFilter" class="bg-slate-950 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-amber-400">
-            </div>
+  <div class="container" id="predictions-container">
+    <!-- Os cards de palpites serão injetados dinamicamente aqui pelo app.js -->
+  </div>
 
-            <!-- Filtro de País -->
-            <div class="flex-1 min-w-[130px]">
-                <select id="countryFilter" class="w-full bg-slate-900 text-slate-200 text-xs px-3 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400">
-                    <option value="">🌍 Todos os Países</option>
-                </select>
-            </div>
-
-            <!-- Filtro de Liga -->
-            <div class="flex-1 min-w-[130px]">
-                <select id="leagueFilter" class="w-full bg-slate-900 text-slate-200 text-xs px-3 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400">
-                    <option value="">🏆 Todas as Ligas</option>
-                </select>
-            </div>
-
-            <!-- Filtro de Casa de Aposta -->
-            <div class="flex-1 min-w-[130px]">
-                <select id="bookmakerFilter" class="w-full bg-slate-900 text-slate-200 text-xs px-3 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400">
-                    <option value="">🎯 Todas as Casas</option>
-                    <option value="Bet365">Bet365</option>
-                    <option value="Betano">Betano</option>
-                    <option value="Superbet">Superbet</option>
-                </select>
-            </div>
-        </section>
-
-        <!-- Section Title -->
-        <div class="flex items-center justify-between">
-            <h3 class="text-lg font-bold flex items-center gap-2 text-slate-100">
-                🔥 Melhores Palpites do Dia
-            </h3>
-            <span id="matchCount" class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">Carregando...</span>
-        </div>
-
-        <!-- Cards Container -->
-        <div id="predictionsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Cards injetados via JavaScript -->
-        </div>
-
-    </main>
-
-    <!-- Firebase Compat SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="app.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
