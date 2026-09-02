@@ -39,7 +39,7 @@ const LIGAS_DE_ELITE_IDS = [
   128  // Liga Profesional (Argentina)
 ];
 
-// Captura TODOS os mercados profissionais disponíveis na casa de aposta
+// Captura TODOS os mercados distribuindo entre Bet365, Betano e Superbet
 async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
   try {
     const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, {
@@ -52,13 +52,16 @@ async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
 
     const bookmakers = data.response[0].bookmakers || [];
     const casasAlvo = ["Bet365", "Betano", "Superbet"];
+    
+    // Embaralha as casas para distribuir igualmente os palpites entre Bet365, Betano e Superbet
+    const casasEmbaralhadas = [...casasAlvo].sort(() => Math.random() - 0.5);
 
-    for (const casaNome of casasAlvo) {
+    for (const casaNome of casasEmbaralhadas) {
       const bk = bookmakers.find(b => b.name.toLowerCase().includes(casaNome.toLowerCase()));
       if (bk && bk.bets && bk.bets.length > 0) {
         let resumoMercados = [];
         
-        // Varre todos os mercados disponíveis (1X2, Handicaps, Gols, Escanteios, Cartões, BTTS, etc.)
+        // Varre o catálogo completo da casa (1X2, Gols, Escanteios, Cartões, Chutes, DNB, BTTS, etc.)
         bk.bets.forEach(b => {
           const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
           resumoMercados.push(`- ${b.name}: [${valores}]`);
@@ -66,7 +69,7 @@ async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
 
         if (resumoMercados.length > 0) {
           return {
-            bookmaker: bk.name,
+            bookmaker: bk.name, // Retorna Bet365, Betano ou Superbet
             mercadosTexto: resumoMercados.join('\n')
           };
         }
@@ -82,25 +85,31 @@ async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
 async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, apiKeyGemini) {
   if (!apiKeyGemini) return null;
 
+  const nomeCasa = dadosOdds ? dadosOdds.bookmaker : "Bet365/Betano/Superbet";
   const contextoOdds = dadosOdds 
-    ? `Cotações REAIS completas disponíveis na ${dadosOdds.bookmaker} para este jogo:\n${dadosOdds.mercadosTexto}` 
+    ? `Cotações REAIS completas disponíveis na ${nomeCasa} (incluindo Mercados Principais, Estatísticas e Submercados):\n${dadosOdds.mercadosTexto}` 
     : `Utilize cotações realistas de mercado.`;
 
-  const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
+  const prompt = `Você é um Tipster Profissional de Elite e Analista Tático de Dados Avançados.
   Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
+  Casa de Apostas de Referência: ${nomeCasa}
   
   ${contextoOdds}
   
-  SUA MISSÃO: Analisar a partida profundamente e escolher a aposta de maior valor absoluto (+EV) dentre QUALQUER mercado disponível na lista acima (Match Winner, Handicap Asiático, Empate Anula, Over/Under Gols, Ambas Marcam, Dupla Hipótese, Escanteios, etc.).
+  SUA MISSÃO: Analisar profundamente o confronto e explorar todo o catálogo da casa fornecido acima (${nomeCasa}). Você tem liberdade total para buscar o maior valor (+EV) não apenas no resultado tradicional, mas em submercados avançados se houver grande vantagem estatística, tais como:
+  - Escanteios (Corners Over/Under)
+  - Cartões (Total de Cartões / Amarelados)
+  - Chutes ao Gol (Player Props)
+  - Ambas Marcam (BTTS) / Empate Anula (DNB) / Intervalo (HT/FT)
   
-  REGRA ABSOLUTA: O nome do mercado e a "odd" retornadas DEVEM corresponder exatamente aos valores e cotações reais listados na casa acima para o mercado escolhido.
+  REGRA ABSOLUTA: O nome do mercado e a "odd" retornadas DEVEM corresponder exatamente aos valores reais listados na casa acima para a entrada escolhida.
   
   Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
-    "market": "Nome exato do mercado escolhido (ex: Handicap Asiático -0.75: ${homeTeam})",
-    "odd": 1.95, 
-    "confidence": 89, 
-    "analysis": "Explicação técnica de 3 frases justificando detalhadamente por que este mercado oferece o melhor valor estatístico e tático para o confronto."
+    "market": "Nome exato do submercado (ex: Mais de 9.5 Escanteios ou Empate Anula: ${homeTeam})",
+    "odd": 1.90, 
+    "confidence": 90, 
+    "analysis": "Explicação técnica de 3 frases cruzando o comportamento tático das equipes com o submercado escolhido para justificar o valor estatístico."
   }`;
 
   try {
@@ -159,6 +168,9 @@ export default async function handler(req, res) {
       const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
 
       if (tipInfo && tipInfo.market && tipInfo.analysis) {
+        const fallbackCasas = ["Bet365", "Betano", "Superbet"];
+        const casaEscolhida = dadosOdds ? dadosOdds.bookmaker : fallbackCasas[Math.floor(Math.random() * fallbackCasas.length)];
+
         const predictionData = {
           matchName: `${homeTeam} vs ${awayTeam}`,
           league,
@@ -167,7 +179,7 @@ export default async function handler(req, res) {
           odd: Number(tipInfo.odd),
           confidence: Number(tipInfo.confidence),
           analysis: tipInfo.analysis,
-          bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365",
+          bookmaker: casaEscolhida,
           matchDate: item.fixture.date,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
@@ -181,7 +193,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `CATÁLOGO TOTAL DE MERCADOS SINCRONIZADO: ${palpitesSalvos} jogos processados usando toda a gama de odds reais das casas!` 
+      message: `CATÁLOGO MULTI-CASA ATIVO (Bet365, Betano, Superbet): ${palpitesSalvos} jogos processados explorando submercados e escanteios!` 
     });
 
   } catch (error) {
