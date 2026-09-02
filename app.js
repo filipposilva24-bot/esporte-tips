@@ -14,71 +14,131 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 1. Calculadora de Banca Avançada
+let allPredictions = []; // Armazena os dados em memória para filtros rápidos
+
+// 1. Calculadora de Banca
 const bankrollInput = document.getElementById('bankroll');
 const stakeResult = document.getElementById('stake-result');
 
 if (bankrollInput) {
     bankrollInput.addEventListener('input', (e) => {
         const value = parseFloat(e.target.value) || 0;
-        const recommendedStake = value * 0.02; // Gestão profissional de 2%
+        const recommendedStake = value * 0.02;
         stakeResult.textContent = `R$ ${recommendedStake.toFixed(2)}`;
     });
 }
 
-// 2. Carregar Palpites com Análise Técnica no Feed
-async function loadPredictions(selectedMarket = 'todos') {
+// 2. Renderizar Palpites com Base nos Filtros Selecionados
+function renderPredictions() {
+    const container = document.getElementById('tips-container');
+    const selectedCountry = document.getElementById('countryFilter').value;
+    const selectedLeague = document.getElementById('leagueFilter').value;
+    const selectedMarket = document.getElementById('marketFilter').value;
+
+    if (!container) return;
+    container.innerHTML = "";
+
+    let filtered = allPredictions.filter(tip => {
+        const matchCountry = tip.country || "Internacional";
+        const matchLeague = tip.league || "Geral";
+        const matchMarket = tip.market || "";
+
+        if (selectedCountry !== 'todos' && matchCountry !== selectedCountry) return false;
+        if (selectedLeague !== 'todos' && matchLeague !== selectedLeague) return false;
+        if (selectedMarket !== 'todos' && matchMarket !== selectedMarket) return false;
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo encontrado para os filtros selecionados.</p>`;
+        return;
+    }
+
+    filtered.forEach(tip => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hover:border-emerald-500/50 transition-all space-y-3";
+        card.innerHTML = `
+            <div class="flex justify-between items-center">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">🌍 ${tip.country || 'Mundial'} • ${tip.league || 'Futebol'}</span>
+                <span class="text-emerald-400 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confiança: ${tip.confidence || '85'}%</span>
+            </div>
+            
+            <h3 class="text-base font-extrabold text-white tracking-tight">${tip.matchName}</h3>
+            
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sugestão de Entrada</p>
+                    <p class="text-emerald-400 font-black text-sm mt-0.5">${tip.market || 'Análise Padrão'}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Odd Média</p>
+                    <p class="text-white font-black text-base mt-0.5">@${Number(tip.odd || 1.85).toFixed(2)}</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/50">
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    <span class="text-emerald-400 font-bold">💡 Análise Técnica:</span> ${tip.analysis || 'Estatísticas favoráveis para este mercado.'}
+                </p>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// 3. Popular Dropdowns Dinamicamente
+function populateFilters() {
+    const countrySelect = document.getElementById('countryFilter');
+    const leagueSelect = document.getElementById('leagueFilter');
+
+    const countries = [...new Set(allPredictions.map(p => p.country || "Internacional"))].sort();
+    
+    countrySelect.innerHTML = `<option value="todos">🌍 Todos os Países</option>`;
+    countries.forEach(country => {
+        countrySelect.innerHTML += `<option value="${country}">${country}</option>`;
+    });
+
+    updateLeaguesDropdown();
+}
+
+function updateLeaguesDropdown() {
+    const countrySelect = document.getElementById('countryFilter').value;
+    const leagueSelect = document.getElementById('leagueFilter');
+
+    let availableLeagues = allPredictions;
+    if (countrySelect !== 'todos') {
+        availableLeagues = allPredictions.filter(p => (p.country || "Internacional") === countrySelect);
+    }
+
+    const leagues = [...new Set(availableLeagues.map(p => p.league || "Geral"))].sort();
+
+    leagueSelect.innerHTML = `<option value="todos">🏆 Todas as Ligas</option>`;
+    leagues.forEach(league => {
+        leagueSelect.innerHTML += `<option value="${league}">${league}</option>`;
+    });
+}
+
+// 4. Carregar Dados do Firebase e Inicializar Eventos
+async function loadPredictions() {
     const container = document.getElementById('tips-container');
     if (!container) return;
     
     try {
         const querySnapshot = await getDocs(collection(db, "predictions"));
-        container.innerHTML = "";
-        
-        let count = 0;
+        allPredictions = [];
 
         querySnapshot.forEach((doc) => {
-            const tip = doc.data();
-            
-            if (selectedMarket !== 'todos' && tip.market !== selectedMarket) {
-                return;
-            }
-
-            count++;
-            const card = document.createElement('div');
-            card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hover:border-emerald-500/50 transition-all space-y-3";
-            card.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">${tip.league || 'Futebol'}</span>
-                    <span class="text-emerald-400 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confiança: ${tip.confidence || '85'}%</span>
-                </div>
-                
-                <h3 class="text-base font-extrabold text-white tracking-tight">${tip.matchName}</h3>
-                
-                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sugestão de Entrada</p>
-                        <p class="text-emerald-400 font-black text-sm mt-0.5">${tip.market || 'Análise Padrão'}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Odd Média</p>
-                        <p class="text-white font-black text-base mt-0.5">@${Number(tip.odd || 1.85).toFixed(2)}</p>
-                    </div>
-                </div>
-
-                <!-- Bloco de Análise Técnica / Justificativa do Especialista -->
-                <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/50">
-                    <p class="text-[11px] text-slate-300 leading-relaxed">
-                        <span class="text-emerald-400 font-bold">💡 Análise Técnica:</span> ${tip.analysis || 'Estatísticas favoráveis para este mercado com base no momento atual das equipes.'}
-                    </p>
-                </div>
-            `;
-            container.appendChild(card);
+            allPredictions.push(doc.data());
         });
 
-        if (count === 0) {
-            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum palpite encontrado para este filtro específico hoje.</p>`;
+        if (allPredictions.length === 0) {
+            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo sincronizado para hoje.</p>`;
+            return;
         }
+
+        populateFilters();
+        renderPredictions();
 
     } catch (error) {
         console.error("Erro ao carregar dados do Firebase: ", error);
@@ -86,15 +146,15 @@ async function loadPredictions(selectedMarket = 'todos') {
     }
 }
 
-// 3. Inicialização e Evento do Filtro
+// Event Listeners para os filtros
 document.addEventListener("DOMContentLoaded", () => {
-    const marketFilter = document.getElementById('marketFilter');
-    
-    if (marketFilter) {
-        marketFilter.addEventListener('change', (e) => {
-            loadPredictions(e.target.value);
-        });
-    }
-    
-    loadPredictions("todos");
+    loadPredictions();
+
+    document.getElementById('countryFilter').addEventListener('change', () => {
+        updateLeaguesDropdown();
+        renderPredictions();
+    });
+
+    document.getElementById('leagueFilter').addEventListener('change', renderPredictions);
+    document.getElementById('marketFilter').addEventListener('change', renderPredictions);
 });
