@@ -109,7 +109,7 @@ export default async function handler(req, res) {
 
     // Limitação de segurança para evitar Timeout da Vercel
     // Puxamos no máximo 100 partidas para não estourar os 10 segundos da Vercel no plano gratuito
-    const jogosImportantes = matches.slice(0, 100); 
+    const jogosImportantes = matches; 
 
     const promessasDeAnalise = jogosImportantes.map(async (item) => {
       const homeTeam = item.teams.home.name;
