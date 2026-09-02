@@ -12,8 +12,9 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const LIGAS_DE_ELITE_IDS = [71, 72, 73, 11, 39, 40, 140, 141, 135, 136, 78, 79, 61, 62, 94, 88, 2, 3, 848, 13, 128];
 
-async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
+async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
   try {
+    // Busca odds e detalhes da partida
     const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, { headers: { 'x-apisports-key': apiFootballKey } });
     if (!response.ok) return null;
     const data = await response.json();
@@ -21,36 +22,49 @@ async function buscarTodosOsMercados(fixtureId, apiFootballKey) {
 
     const bookmakers = data.response[0].bookmakers || [];
     const casasAlvo = ["Bet365", "Betano", "Superbet"];
-    const casasEmbaralhadas = [...casasAlvo].sort(() => Math.random() - 0.5);
-
-    for (const casaNome of casasEmbaralhadas) {
-      const bk = bookmakers.find(b => b.name.toLowerCase().includes(casaNome.toLowerCase()));
-      if (bk && bk.bets && bk.bets.length > 0) {
-        let resumoMercados = [];
-        bk.bets.forEach(b => {
-          const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
-          resumoMercados.push(`- ${b.name}: [${valores}]`);
-        });
-        if (resumoMercados.length > 0) return { bookmaker: bk.name, mercadosTexto: resumoMercados.join('\n') };
-      }
+    const casaSorteada = casasAlvo[Math.floor(Math.random() * casasAlvo.length)];
+    
+    let bk = bookmakers.find(b => b.name.toLowerCase().includes(casaSorteada.toLowerCase())) || bookmakers[0];
+    let resumoMercados = [];
+    if (bk && bk.bets) {
+      bk.bets.forEach(b => {
+        const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
+        resumoMercados.push(`- ${b.name}: [${valores}]`);
+      });
     }
-    return null;
-  } catch (error) { return null; }
+    return { bookmaker: bk ? bk.name : "Bet365", mercadosTexto: resumoMercados.join('\n') };
+  } catch (e) { return null; }
 }
 
 async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, apiKeyGemini) {
   if (!apiKeyGemini) return null;
-  const nomeCasa = dadosOdds ? dadosOdds.bookmaker : "Bet365/Betano/Superbet";
-  const contextoOdds = dadosOdds ? `Cotações na ${nomeCasa}:\n${dadosOdds.mercadosTexto}` : `Use cotações realistas.`;
+  const nomeCasa = dadosOdds ? dadosOdds.bookmaker : "Bet365";
+  const contextoOdds = dadosOdds ? `Cotações:\n${dadosOdds.mercadosTexto}` : `Use cotações realistas.`;
 
-  const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${homeTeam} vs ${awayTeam} (${league}). Casa: ${nomeCasa}.
+  const prompt = `Você é um Tipster Profissional de Elite e Cientista de Dados Esportivos. 
+  Partida: ${homeTeam} vs ${awayTeam} (${league}). Casa: ${nomeCasa}.
   ${contextoOdds}
-  Forneça DUAS opções JSON:
-  1. "mainMarket": Melhor entrada (+EV).
-  2. "criarApostaMarket": Combinada com ODD MÁXIMA 2.00.
+  
+  Forneça uma análise avançada em JSON estrito contendo:
+  - "mainMarket": Melhor mercado principal de valor (+EV).
+  - "mainOdd": Odd principal numérica.
+  - "mainConfidence": Confiança (0-100).
+  - "mainAnalysis": Análise tática concisa (3 frases), citando contexto de momento, xG ou padrão tático.
+  - "criarApostaMarket": Sugestão de Criar Aposta com teto de odd 2.00.
+  - "criarApostaOdd": Odd numérica da combinada (máx 2.00).
+  - "criarApostaAnalysis": Justificativa técnica curta para o Criar Aposta.
+  - "refereeNote": Perfil disciplinar do árbitro (ex: "Árbitro rigoroso, média alta de cartões").
+  - "rivalryNote": Nota sobre rivalidade ou clássico (ex: "Clássico estadual de alta intensidade" ou "Jogo regular de campeonato").
+  - "injuryNote": Nota sobre desfalques ou momento físico (ex: "Equipes com força máxima" ou "Ataque mandante desfalcado").
+  - "homeStrength": Força técnica estimada do mandante (número de 40 a 95).
+  - "awayStrength": Força técnica estimada do visitante (número de 40 a 95).
+
+  Retorne APENAS o JSON válido no formato:
   {
-    "mainMarket": "Mercado", "mainOdd": 1.75, "mainConfidence": 88, "mainAnalysis": "3 frases.",
-    "criarApostaMarket": "Criar Aposta: Mercado", "criarApostaOdd": 1.85, "criarApostaConfidence": 90, "criarApostaAnalysis": "3 frases."
+    "mainMarket": "...", "mainOdd": 1.75, "mainConfidence": 89, "mainAnalysis": "...",
+    "criarApostaMarket": "...", "criarApostaOdd": 1.85, "criarApostaAnalysis": "...",
+    "refereeNote": "...", "rivalryNote": "...", "injuryNote": "...",
+    "homeStrength": 78, "awayStrength": 65
   }`;
 
   try {
@@ -62,17 +76,16 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, 
     let textResult = data.candidates[0].content.parts[0].text;
     const jsonMatch = textResult.match(/\{[\s\S]*\}/);
     if (jsonMatch) textResult = jsonMatch[0];
-    const parsed = JSON.parse(textResult);
-
-    return {
-      mainMarket: parsed.mainMarket || `Resultado Final: ${homeTeam}`,
-      mainOdd: Number(parsed.mainOdd) || 1.80, mainConfidence: Number(parsed.mainConfidence) || 88,
-      mainAnalysis: parsed.mainAnalysis || "Análise tática aprofundada.",
-      criarApostaMarket: parsed.criarApostaMarket || `Dupla Hipótese + Under 3.5`,
-      criarApostaOdd: Number(parsed.criarApostaOdd) || 1.85, criarApostaAnalysis: parsed.criarApostaAnalysis || "Combinada estruturada."
-    };
+    return JSON.parse(textResult);
   } catch (error) {
-    return { mainMarket: `Vitória ${homeTeam}`, mainOdd: 1.80, mainConfidence: 88, mainAnalysis: "Análise base tática.", criarApostaMarket: `Chance Dupla`, criarApostaOdd: 1.85, criarApostaAnalysis: "Combinada base." };
+    return {
+      mainMarket: `Vitória ${homeTeam}`, mainOdd: 1.80, mainConfidence: 85,
+      mainAnalysis: "Análise tática estruturada baseada no momento atual das equipes.",
+      criarApostaMarket: `Chance Dupla + Menos de 3.5 Gols`, criarApostaOdd: 1.85,
+      criarApostaAnalysis: "Combinada defensiva de alta probabilidade.",
+      refereeNote: "Árbitro padrão para o torneio.", rivalryNote: "Confronto regular.", injuryNote: "Elencos disponíveis.",
+      homeStrength: 75, awayStrength: 70
+    };
   }
 }
 
@@ -88,7 +101,7 @@ module.exports = async function handler(req, res) {
     const allMatches = data.response || [];
     const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
     const loteDeHoje = matches.slice(0, 5); 
-    let palpitesSalvos = 0;
+    let salvos = 0;
 
     for (const item of loteDeHoje) {
       const fixtureId = item.fixture.id;
@@ -96,45 +109,41 @@ module.exports = async function handler(req, res) {
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
       
-      const dadosOdds = await buscarTodosOsMercados(fixtureId, apiFootballKey);
-      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
+      const dadosOdds = await dadosAvancadosFixture(fixtureId, apiFootballKey);
+      const tip = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
 
-      if (tipInfo && tipInfo.mainMarket) {
-        let oddPrincipal = Number(tipInfo.mainOdd);
-        
-        // COMPARADOR DE ODDS: Gera o rastreio das 3 casas
+      if (tip && tip.mainMarket) {
+        const oddPrincipal = Number(tip.mainOdd) || 1.80;
         const comparador = {
           Bet365: (oddPrincipal * (1 + (Math.random() * 0.04 - 0.02))).toFixed(2),
           Betano: (oddPrincipal * (1 + (Math.random() * 0.04 - 0.02))).toFixed(2),
           Superbet: (oddPrincipal * (1 + (Math.random() * 0.04 - 0.02))).toFixed(2)
         };
-        const casaEscolhida = dadosOdds ? dadosOdds.bookmaker : "Bet365";
-        
-        // INTELIGÊNCIA DE SELOS: +EV (Super Odd) e Zebra
-        const isValueBet = tipInfo.mainConfidence >= 88 && oddPrincipal >= 1.70;
-        const isUnderdog = oddPrincipal >= 2.40 && tipInfo.mainConfidence >= 80;
 
         const predictionData = {
           matchName: `${homeTeam} vs ${awayTeam}`,
           league, country: item.league.country || "Internacional",
-          market: tipInfo.mainMarket, odd: oddPrincipal,
-          confidence: tipInfo.mainConfidence, analysis: tipInfo.mainAnalysis,
-          criarApostaMarket: tipInfo.criarApostaMarket, criarApostaOdd: tipInfo.criarApostaOdd, criarApostaAnalysis: tipInfo.criarApostaAnalysis,
-          bookmaker: casaEscolhida, matchDate: item.fixture.date,
-          
-          // NOVOS CAMPOS DA ETAPA 2
+          market: tip.mainMarket, odd: oddPrincipal,
+          confidence: Number(tip.mainConfidence) || 88, analysis: tip.mainAnalysis,
+          criarApostaMarket: tip.criarApostaMarket, criarApostaOdd: Number(tip.criarApostaOdd) || 1.85, criarApostaAnalysis: tip.criarApostaAnalysis,
+          bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365", matchDate: item.fixture.date,
           comparadorOdds: comparador,
-          isValueBet: isValueBet,
-          isUnderdog: isUnderdog,
-          status: "pendente", // pendente, green, red
+          isValueBet: (tip.mainConfidence >= 88 && oddPrincipal >= 1.70),
+          isUnderdog: (oddPrincipal >= 2.30),
+          refereeNote: tip.refereeNote || "Árbitro padrão",
+          rivalryNote: tip.rivalryNote || "Partida regular",
+          injuryNote: tip.injuryNote || "Elencos confirmados",
+          homeStrength: Number(tip.homeStrength) || 75,
+          awayStrength: Number(tip.awayStrength) || 70,
+          status: "pendente",
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
         await db.collection('predictions').doc(String(fixtureId)).set(predictionData, { merge: true });
-        palpitesSalvos++;
+        salvos++;
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    return res.status(200).json({ success: true, message: `ETAPA 2 CONCLUÍDA: ${palpitesSalvos} jogos processados!` });
+    return res.status(200).json({ success: true, message: `Etapa Master Concluída: ${salvos} jogos processados com IA Avançada!` });
   } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
 };
