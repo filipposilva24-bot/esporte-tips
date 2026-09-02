@@ -1,54 +1,98 @@
-// Exemplo de como estruturar o card dentro do seu loop de exibição no app.js
-predictions.forEach(pred => {
-  const cardId = pred.id || Math.random().toString(36).substring(7);
-  
-  // Verifica se o Criar Aposta existe nos dados vindos do Firebase
-  const temCriarAposta = pred.criarApostaMarket ? true : false;
+// Configuração do Firebase (Substitua com suas credenciais do projeto se necessário)
+const firebaseConfig = {
+  // Insira sua configuração do Firebase Web SDK aqui se já não estiver embutida, 
+  // ou utilize o carregamento padrão se o projeto já estiver integrado.
+};
 
-  const cardHTML = `
-    <div class="prediction-card" style="background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-      
-      <!-- Cabeçalho do Jogo e Tag da Casa -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <span style="font-size: 0.85rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px;">${pred.league}</span>
-        <span style="font-size: 0.85rem; font-weight: bold; background: #059669; padding: 2px 8px; border-radius: 4px;">${pred.bookmaker || 'Bet365'}</span>
-      </div>
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-      <h3 style="font-size: 1.1rem; margin-bottom: 12px; font-weight: bold;">${pred.matchName}</h3>
+const db = firebase.firestore();
 
-      <!-- APOSTA PRINCIPAL (O Padrão Antigo) -->
-      <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <span style="color: #38bdf8; font-weight: bold; font-size: 0.95rem;">🎯 Principal: ${pred.market}</span>
-          <span style="color: #f59e0b; font-weight: bold; font-size: 1.1rem;">@${pred.odd}</span>
-        </div>
-        <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4;">${pred.analysis}</p>
-      </div>
+// Função global para alternar a gaveta do Criar Aposta
+window.toggleCriarAposta = function(cardId) {
+  const el = document.getElementById(`criar-aposta-${cardId}`);
+  if (el) {
+    if (el.style.display === "none" || el.style.display === "") {
+      el.style.display = "block";
+    } else {
+      el.style.display = "none";
+    }
+  }
+};
 
-      <!-- SEGUNDA OPÇÃO: BOTÃO CRIAR APOSTA (ATÉ 2.00) -->
-      ${temCriarAposta ? `
-        <div style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 10px; margin-top: 10px;">
-          <button onclick="toggleCriarAposta('${cardId}')" style="width: 100%; background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 0.9rem;">
-            ⚡ Sugestão de Criar Aposta (Até 2.00)
-          </button>
-          
-          <div id="criar-aposta-${cardId}" style="display: none; margin-top: 8px; background: rgba(37, 99, 235, 0.1); padding: 10px; border-radius: 8px; border: 1px solid rgba(37, 99, 235, 0.3);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <span style="color: #60a5fa; font-weight: bold; font-size: 0.9rem;">${pred.criarApostaMarket}</span>
-              <span style="color: #f59e0b; font-weight: bold; font-size: 1rem;">@${pred.criarApostaOdd}</span>
+// Carrega os palpites salvos no Firestore
+async function carregarPalpites() {
+  const container = document.getElementById('predictions-container');
+  container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 20px;">Carregando análises de elite...</p>';
+
+  try {
+    const snapshot = await db.collection('predictions').orderBy('createdAt', 'desc').get();
+    
+    if (snapshot.empty) {
+      container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum palpite encontrado para hoje. Execute a API para gerar novas entradas.</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+
+    snapshot.forEach(doc => {
+      const pred = doc.data();
+      const cardId = doc.id;
+      const temCriarAposta = pred.criarApostaMarket ? true : false;
+
+      const cardHTML = `
+        <div class="prediction-card">
+          <div class="card-header">
+            <span class="league-tag">${pred.league || 'Elite'}</span>
+            <span class="bookmaker-tag">${pred.bookmaker || 'Bet365'}</span>
+          </div>
+
+          <h3 class="match-title">${pred.matchName}</h3>
+
+          <!-- APOSTA PRINCIPAL -->
+          <div class="main-market-box">
+            <div class="market-row">
+              <span class="market-name">🎯 ${pred.market}</span>
+              <span class="market-odd">@${pred.odd ? Number(pred.odd).toFixed(2) : '1.80'}</span>
             </div>
-            <p style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.3;">${pred.criarApostaAnalysis}</p>
+            <p class="market-analysis">${pred.analysis}</p>
+          </div>
+
+          <!-- SEGUNDA OPÇÃO: CRIAR APOSTA (ATÉ 2.00) -->
+          ${temCriarAposta ? `
+            <div class="criar-aposta-section">
+              <button class="criar-aposta-btn" onclick="toggleCriarAposta('${cardId}')">
+                ⚡ Sugestão de Criar Aposta (Até 2.00)
+              </button>
+              
+              <div id="criar-aposta-${cardId}" class="criar-aposta-content">
+                <div class="market-row" style="margin-bottom: 4px;">
+                  <span style="color: #60a5fa; font-weight: bold; font-size: 0.9rem;">${pred.criarApostaMarket}</span>
+                  <span style="color: #f59e0b; font-weight: bold; font-size: 1rem;">@${pred.criarApostaOdd ? Number(pred.criarApostaOdd).toFixed(2) : '1.85'}</span>
+                </div>
+                <p class="market-analysis" style="font-size: 0.85rem;">${pred.criarApostaAnalysis}</p>
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="card-footer">
+            <span>Confiança da IA: <span class="confidence-badge">${pred.confidence || 88}%</span></span>
           </div>
         </div>
-      ` : ''}
+      `;
 
-      <!-- Confiança da IA -->
-      <div style="margin-top: 10px; text-align: right; font-size: 0.8rem; color: #94a3b8;">
-        Confiança da IA: <strong style="color: #10b981;">${pred.confidence}%</strong>
-      </div>
+      container.innerHTML += cardHTML;
+    });
 
-    </div>
-  `;
-  
-  document.getElementById('predictions-container').innerHTML += cardHTML;
+  } catch (error) {
+    console.error("Erro ao carregar palpites:", error);
+    container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar as análises. Tente atualizar a página.</p>';
+  }
+}
+
+// Inicializa a listagem ao carregar a página
+document.addEventListener('DOMContentLoaded', () => {
+  carregarPalpites();
 });
