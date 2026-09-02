@@ -42,11 +42,11 @@ function renderPredictions() {
     const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
     let filtered = allPredictions.filter(tip => {
-        // Filtro de Segurança: Garante que exibe apenas jogos cuja data é hoje
-        if (tip.matchDate) {
-            const dataJogo = tip.matchDate.split('T')[0];
-            if (dataJogo !== hojeStr) return false;
-        }
+    // Trava de segurança rigorosa: se não tiver data ou se a data não for estritamente hoje, descarta
+    if (!tip.matchDate) return false;
+
+    const dataJogo = tip.matchDate.split('T')[0];
+    if (dataJogo !== hojeStr) return false;
 
         const matchCountry = tip.country || "Internacional";
         const matchLeague = tip.league || "Geral";
