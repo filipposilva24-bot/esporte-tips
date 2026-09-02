@@ -1,174 +1,178 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
-
+// Configuração do Firebase para o projeto FutTips
 const firebaseConfig = {
-    apiKey: "AIzaSyAd0jnevrRoRT5vdI_xGZuAxDLgRTCfkzY",
-    authDomain: "futtips-7b09f.firebaseapp.com",
-    projectId: "futtips-7b09f",
-    storageBucket: "futtips-7b09f.firebasestorage.app",
-    messagingSenderId: "321560814934",
-    appId: "1:321560814934:web:db7d4226f712a2a7e3e2f7",
-    measurementId: "G-VYP83JBLSN"
+  apiKey: "SUA_API_KEY",
+  authDomain: "futtips.firebaseapp.com",
+  projectId: "futtips",
+  storageBucket: "futtips.appspot.com",
+  messagingSenderId: "SEU_SENDER_ID",
+  appId: "SEU_APP_ID"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
 
 let allPredictions = [];
 
-// 1. Calculadora de Banca
-const bankrollInput = document.getElementById('bankroll');
-const stakeResult = document.getElementById('stake-result');
+// Elementos da DOM
+const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const dateFilterInput = document.getElementById('dateFilter');
+const countryFilter = document.getElementById('countryFilter');
+const leagueFilter = document.getElementById('leagueFilter');
+const bankrollInput = document.getElementById('bankrollInput');
+const suggestedStake = document.getElementById('suggestedStake');
+const container = document.getElementById('predictionsContainer');
+const matchCount = document.getElementById('matchCount');
 
+// Inicializa o input com a data de hoje e escuta mudanças de data
+if (dateFilterInput) {
+  dateFilterInput.value = hojeStr;
+  dateFilterInput.addEventListener('change', (e) => {
+    carregarPalpitesPorData(e.target.value);
+  });
+}
+
+// Gestão de banca em tempo real
 if (bankrollInput) {
-    bankrollInput.addEventListener('input', (e) => {
-        const value = parseFloat(e.target.value) || 0;
-        const recommendedStake = value * 0.02;
-        stakeResult.textContent = `R$ ${recommendedStake.toFixed(2)}`;
-    });
+  bankrollInput.addEventListener('input', (e) => {
+    const bankroll = parseFloat(e.target.value) || 0;
+    const stake = bankroll * 0.02;
+    suggestedStake.textContent = `R$ ${stake.toFixed(2)}`;
+  });
 }
 
-// Função auxiliar para verificar se o jogo é realmente hoje no Brasil
-function isJogoHojeBrasil(matchDateISO) {
-    if (!matchDateISO) return false;
-
-    const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
-    const hojeBR = new Date().toLocaleDateString('pt-BR', options); 
-    const dataJogoBR = new Date(matchDateISO).toLocaleDateString('pt-BR', options);
-
-    return dataJogoBR === hojeBR;
-}
-
-// 2. Renderizar Palpites Filtrando Rigorosamente por Hoje e pelos Menus
-function renderPredictions() {
-    const container = document.getElementById('tips-container');
-    const selectedCountry = document.getElementById('countryFilter').value;
-    const selectedLeague = document.getElementById('leagueFilter').value;
-    const selectedMarket = document.getElementById('marketFilter').value;
-
-    if (!container) return;
-    container.innerHTML = "";
-
-    let filtered = allPredictions.filter(tip => {
-        // Trava de fuso horário: converte UTC para Brasil antes de verificar se é hoje
-        if (!isJogoHojeBrasil(tip.matchDate)) return false;
-
-        const matchCountry = tip.country || "Internacional";
-        const matchLeague = tip.league || "Geral";
-        const matchMarket = tip.market || "";
-
-        if (selectedCountry !== 'todos' && matchCountry !== selectedCountry) return false;
-        if (selectedLeague !== 'todos' && matchLeague !== selectedLeague) return false;
-        if (selectedMarket !== 'todos' && matchMarket !== selectedMarket) return false;
-
-        return true;
-    });
-
-    if (filtered.length === 0) {
-        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo disponível para hoje com estes filtros.</p>`;
-        return;
-    }
-
-    filtered.forEach(tip => {
-        const card = document.createElement('div');
-        card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl hover:border-emerald-500/50 transition-all space-y-3";
-        card.innerHTML = `
-            <div class="flex justify-between items-center">
-                <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-slate-800 text-emerald-400 rounded-full border border-slate-700">🌍 ${tip.country || 'Mundial'} • ${tip.league || 'Futebol'}</span>
-                <span class="text-emerald-400 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Confiança: ${tip.confidence || '85'}%</span>
-            </div>
-            
-            <h3 class="text-base font-extrabold text-white tracking-tight">${tip.matchName}</h3>
-            
-            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 flex justify-between items-center">
-                <div>
-                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sugestão de Entrada</p>
-                    <p class="text-emerald-400 font-black text-sm mt-0.5">${tip.market || 'Análise Padrão'}</p>
-                </div>
-                <div class="text-right">
-                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Odd Média</p>
-                    <p class="text-white font-black text-base mt-0.5">@${Number(tip.odd || 1.85).toFixed(2)}</p>
-                </div>
-            </div>
-
-            <div class="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/50">
-                <p class="text-[11px] text-slate-300 leading-relaxed">
-                    <span class="text-emerald-400 font-bold">💡 Análise Técnica:</span> ${tip.analysis || 'Estatísticas favoráveis para este mercado.'}
-                </p>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-// 3. Popular Dropdowns Dinamicamente considerando apenas jogos de hoje no Brasil
-function populateFilters() {
-    const countrySelect = document.getElementById('countryFilter');
-    const jogosDeHoje = allPredictions.filter(p => isJogoHojeBrasil(p.matchDate));
-
-    const countries = [...new Set(jogosDeHoje.map(p => p.country || "Internacional"))].sort();
-    
-    countrySelect.innerHTML = `<option value="todos">🌍 Todos os Países</option>`;
-    countries.forEach(country => {
-        countrySelect.innerHTML += `<option value="${country}">${country}</option>`;
-    });
-
-    updateLeaguesDropdown();
-}
-
-function updateLeaguesDropdown() {
-    const countrySelect = document.getElementById('countryFilter').value;
-    const leagueSelect = document.getElementById('leagueFilter');
-    
-    let availableLeagues = allPredictions.filter(p => isJogoHojeBrasil(p.matchDate));
-    
-    if (countrySelect !== 'todos') {
-        availableLeagues = availableLeagues.filter(p => (p.country || "Internacional") === countrySelect);
-    }
-
-    const leagues = [...new Set(availableLeagues.map(p => p.league || "Geral"))].sort();
-
-    leagueSelect.innerHTML = `<option value="todos">🏆 Todas as Ligas</option>`;
-    leagues.forEach(league => {
-        leagueSelect.innerHTML += `<option value="${league}">${league}</option>`;
-    });
-}
-
-// 4. Carregar Dados do Firebase
-async function loadPredictions() {
-    const container = document.getElementById('tips-container');
-    if (!container) return;
-    
-    try {
-        const querySnapshot = await getDocs(collection(db, "predictions"));
-        allPredictions = [];
-
-        querySnapshot.forEach((doc) => {
-            allPredictions.push(doc.data());
-        });
-
-        if (allPredictions.length === 0) {
-            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo sincronizado.</p>`;
-            return;
-        }
-
-        populateFilters();
-        renderPredictions();
-
-    } catch (error) {
-        console.error("Erro ao carregar dados do Firebase: ", error);
-        container.innerHTML = `<p class="text-xs text-red-400 text-center py-6">Erro ao conectar com o banco de dados.</p>`;
-    }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-    loadPredictions();
-
-    document.getElementById('countryFilter').addEventListener('change', () => {
-        updateLeaguesDropdown();
-        renderPredictions();
-    });
-
-    document.getElementById('leagueFilter').addEventListener('change', renderPredictions);
-    document.getElementById('marketFilter').addEventListener('change', renderPredictions);
+// Carregamento inicial ao abrir o app
+window.addEventListener('DOMContentLoaded', () => {
+  carregarPalpitesPorData(hojeStr);
 });
+
+// Busca palpites do Firebase filtrando pela data selecionada
+async function carregarPalpitesPorData(dataAlvo) {
+  container.innerHTML = `
+    <div class="col-span-full text-center py-16">
+      <p class="text-slate-400 text-sm animate-pulse">Buscando análises para ${dataAlvo}...</p>
+    </div>
+  `;
+  
+  try {
+    const snapshot = await db.collection('predictions').get();
+    allPredictions = [];
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      // Compara os primeiros caracteres (YYYY-MM-DD) do matchDate
+      if (data.matchDate && data.matchDate.startsWith(dataAlvo)) {
+        allPredictions.push({ id: doc.id, ...data });
+      }
+    });
+
+    povoarFiltros(allPredictions);
+    aplicarFiltros();
+
+  } catch (error) {
+    console.error("Erro ao carregar histórico:", error);
+    container.innerHTML = `
+      <div class="col-span-full text-center py-16 bg-slate-900/40 rounded-2xl border border-slate-800">
+        <p class="text-red-400 text-sm">Erro ao carregar os dados. Verifique a conexão com o Firebase.</p>
+      </div>
+    `;
+  }
+}
+
+// Popula os selects de países e ligas dinamicamente com base nos dados do dia
+function povoarFiltros(predictions) {
+  const paises = [...new Set(predictions.map(p => p.country))].filter(Boolean).sort();
+  const ligas = [...new Set(predictions.map(p => p.league))].filter(Boolean).sort();
+
+  countryFilter.innerHTML = '<option value="">🌍 Todos os Países</option>';
+  paises.forEach(pais => {
+    countryFilter.innerHTML += `<option value="${pais}">${pais}</option>`;
+  });
+
+  leagueFilter.innerHTML = '<option value="">🏆 Todas as Ligas</option>';
+  ligas.forEach(liga => {
+    leagueFilter.innerHTML += `<option value="${liga}">${liga}</option>`;
+  });
+}
+
+countryFilter.addEventListener('change', aplicarFiltros);
+leagueFilter.addEventListener('change', aplicarFiltros);
+
+// Aplica os filtros de país e liga nos cards exibidos
+function aplicarFiltros() {
+  const paisSelecionado = countryFilter.value;
+  const ligaSelecionada = leagueFilter.value;
+
+  const filtrados = allPredictions.filter(p => {
+    const matchPais = !paisSelecionado || p.country === paisSelecionado;
+    const matchLiga = !ligaSelecionada || p.league === ligaSelecionada;
+    return matchPais && matchLiga;
+  });
+
+  renderizarCards(filtrados);
+}
+
+// Renderiza os cards de palpites na tela
+function renderizarCards(predictions) {
+  matchCount.textContent = `${predictions.length} jogos encontrados`;
+
+  if (predictions.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full text-center py-16 bg-slate-900/40 rounded-2xl border border-slate-800">
+        <p class="text-slate-400 text-sm font-medium">Nenhum palpite encontrado para esta data ou filtro.</p>
+        <p class="text-slate-500 text-xs mt-1">Selecione outra data no calendário acima.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = predictions.map(p => {
+    const horaMatch = p.matchDate ? new Date(p.matchDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+    
+    return `
+      <div class="bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 flex flex-col justify-between shadow-xl transition">
+        <div>
+          <!-- Cabeçalho do Card -->
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-3">
+            <span class="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50 font-medium text-slate-300">${p.league}</span>
+            <span class="font-mono bg-slate-950 px-2.5 py-0.5 rounded text-amber-400 font-semibold">${horaMatch}</span>
+          </div>
+
+          <!-- Times -->
+          <h4 class="text-base font-bold text-slate-100 mb-4">${p.matchName}</h4>
+
+          <!-- Mercado e Odd -->
+          <div class="bg-slate-950/70 border border-slate-800/60 rounded-xl p-3.5 mb-4 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 block font-medium">Mercado Sugerido</span>
+              <span class="text-sm font-extrabold text-emerald-400">${p.market}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 block font-medium">Odd Média</span>
+              <span class="text-lg font-black text-amber-400">@${Number(p.odd).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <!-- Análise Tática -->
+          <div class="space-y-1 mb-4">
+            <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+              🧠 Análise Tática:
+            </span>
+            <p class="text-xs text-slate-300 leading-relaxed bg-slate-950/40 p-3 rounded-xl border border-slate-800/40">
+              ${p.analysis}
+            </p>
+          </div>
+        </div>
+
+        <!-- Rodapé do Card (Confiança) -->
+        <div class="pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs">
+          <span class="text-slate-400 font-medium">Confiança da IA</span>
+          <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg font-bold">
+            ${p.confidence}%
+          </span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
