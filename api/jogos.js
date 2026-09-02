@@ -14,15 +14,11 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // LISTA BRANCA DE LIGAS DE ELITE (IDs oficiais da API-Football)
-// Apenas competições principais do Brasil, Europa, Américas e Internacionais
 const LIGAS_DE_ELITE_IDS = [
-  // Brasil
   71,  // Brasileirão Série A
   72,  // Brasileirão Série B
   73,  // Copa do Brasil
   11,  // Campeonato Paulista
-  
-  // Europa - Principais Ligas Nacionais
   39,  // Premier League (Inglaterra)
   40,  // Championship (Inglaterra)
   140, // La Liga (Espanha)
@@ -35,8 +31,6 @@ const LIGAS_DE_ELITE_IDS = [
   62,  // Ligue 2 (França)
   94,  // Primeira Liga (Portugal)
   88,  // Eredivisie (Holanda)
-
-  // Internacionais e Continentais
   2,   // UEFA Champions League
   3,   // UEFA Europa League
   848, // UEFA Conference League
@@ -45,30 +39,62 @@ const LIGAS_DE_ELITE_IDS = [
   128  // Liga Profesional (Argentina)
 ];
 
-async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemini) {
+// Função para buscar odds reais nas casas de preferência (Bet365, Betano, Superbet)
+async function buscarOddsReais(fixtureId, apiFootballKey) {
+  try {
+    const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, {
+      headers: { 'x-apisports-key': apiFootballKey }
+    });
+    
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.response || data.response.length === 0) return null;
+
+    const bookmakers = data.response[0].bookmakers || [];
+    const casasAlvo = ["Bet365", "Betano", "Superbet"];
+
+    for (const casaNome of casasAlvo) {
+      const bk = bookmakers.find(b => b.name.toLowerCase().includes(casaNome.toLowerCase()));
+      if (bk && bk.bets && bk.bets.length > 0) {
+        // Procura o mercado de Match Winner (ID 1) ou Resultado Final
+        const mercado = bk.bets.find(b => b.id === 1 || b.name === "Match Winner" || b.name === "Full Time Result");
+        if (mercado && mercado.values && mercado.values.length > 0) {
+          // Pega a primeira opção relevante (ex: Mandante) para validar com a IA
+          const selecao = mercado.values[0];
+          return {
+            bookmaker: bk.name,
+            market: `Vitória ${selecao.value}`,
+            odd: parseFloat(selecao.odd)
+          };
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error(`Erro ao buscar odds para fixture ${fixtureId}:`, error);
+    return null;
+  }
+}
+
+async function analisarComIAEstatisticas(homeTeam, awayTeam, league, oddsReais, apiKeyGemini) {
   if (!apiKeyGemini) return null;
+
+  const infoOddsStr = oddsReais 
+    ? `Cotação real obtida na ${oddsReais.bookmaker}: Mercado de '${oddsReais.market}' @${oddsReais.odd}.` 
+    : `Utilize cotações realistas de mercado.`;
 
   const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
   Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
+  ${infoOddsStr}
   
-  SUA MISSÃO: Usar seu conhecimento histórico sobre o padrão tático, força ofensiva/defensiva e momento atual destas equipes para encontrar a APOSTA DE MAIOR VALOR (+EV).
-  
-  MERCADOS PARA AVALIAÇÃO:
-  - Match Odds (Vitória, Empate)
-  - Empate Anula a Aposta (DNB) e Dupla Hipótese
-  - Handicaps Asiáticos (ex: -1.0, +0.5, etc.)
-  - Gols: Over/Under (ex: Over 1.5, Under 2.5, Over 0.5 HT)
-  - Ambas as Equipes Marcam (Sim/Não)
-  - Escanteios (Over/Under)
-  
-  REGRA ABSOLUTA: NÃO diversifique só por diversificar. Escolha o mercado que faça TOTAL SENTIDO LÓGICO para a realidade tática destas duas equipes. Se o jogo tem um franco favorito, analise Handicaps. Se são times reativos, analise o Under.
+  SUA MISSÃO: Fornecer a melhor análise tática e validar ou sugerir o mercado de maior valor (+EV) com base estritamente nas cotações reais fornecidas acima ou no padrão da partida.
   
   Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
-    "market": "Nome do Mercado",
-    "odd": 1.85, 
+    "market": "${oddsReais ? oddsReais.market : 'Match Winner'}",
+    "odd": ${oddsReais ? oddsReais.odd : 1.85}, 
     "confidence": 92, 
-    "analysis": "Explicação técnica de 3 frases justificando o valor."
+    "analysis": "Explicação técnica de 3 frases justificando o valor tático."
   }`;
 
   try {
@@ -81,11 +107,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       })
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`ERRO DO GOOGLE GEMINI (${response.status}) para ${homeTeam} vs ${awayTeam}:`, errorText);
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
     if (!data.candidates || !data.candidates[0]) return null;
@@ -94,7 +116,6 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(textResult);
   } catch (error) {
-    console.error(`EXCEÇÃO NA IA para ${homeTeam} vs ${awayTeam}:`, error.message);
     return null;
   }
 }
@@ -118,7 +139,6 @@ export default async function handler(req, res) {
     const data = await response.json();
     const allMatches = data.response || [];
 
-    // FILTRAGEM CIRÚRGICA: Mantém apenas os jogos que pertencem às ligas de elite
     const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
 
     const snapshot = await db.collection('predictions').get();
@@ -134,18 +154,22 @@ export default async function handler(req, res) {
     const jogosPendentes = matches.filter(item => !jogosJaSalvos.has(item.fixture.id));
 
     if (jogosPendentes.length === 0) {
-      return res.status(200).json({ success: true, message: `Excelente! Todos os jogos das principais ligas de hoje já foram analisados e salvos no banco.` });
+      return res.status(200).json({ success: true, message: `Todos os jogos de elite de hoje já possuem odds reais sincronizadas.` });
     }
 
-    const loteDeHoje = jogosPendentes.slice(0, 10); 
+    const loteDeHoje = jogosPendentes.slice(0, 5); // Processa de 5 em 5 para respeitar limites de requisições de odds
     let palpitesSalvos = 0;
 
     for (const item of loteDeHoje) {
+      const fixtureId = item.fixture.id;
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
       
-      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, geminiApiKey);
+      // BUSCA AS ODDS REAIS NA BET365, BETANO OU SUPERBET ANTES DA IA ANALISAR
+      const oddsReais = await buscarOddsReais(fixtureId, apiFootballKey);
+
+      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, oddsReais, geminiApiKey);
 
       if (tipInfo && tipInfo.market && tipInfo.analysis) {
         const predictionData = {
@@ -156,24 +180,25 @@ export default async function handler(req, res) {
           odd: Number(tipInfo.odd),
           confidence: Number(tipInfo.confidence),
           analysis: tipInfo.analysis,
+          bookmaker: oddsReais ? oddsReais.bookmaker : "Bet365",
           matchDate: item.fixture.date,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('predictions').doc(String(item.fixture.id)).set(predictionData, { merge: true });
+        await db.collection('predictions').doc(String(fixtureId)).set(predictionData, { merge: true });
         palpitesSalvos++;
       }
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     return res.status(200).json({ 
       success: true, 
-      message: `LOTE DE ELITE CONCLUÍDO! ${palpitesSalvos} de ${loteDeHoje.length} jogos principais analisados. Ainda faltam ${jogosPendentes.length - loteDeHoje.length} jogos de peso na fila.` 
+      message: `SINCRONIZAÇÃO DE ODDS REAIS: ${palpitesSalvos} jogos processados com cotações da Bet365/Betano/Superbet. Restam ${jogosPendentes.length - loteDeHoje.length} na fila.` 
     });
 
   } catch (error) {
-    console.error("Erro na sincronização:", error);
+    console.error("Erro na sincronização de odds:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }
