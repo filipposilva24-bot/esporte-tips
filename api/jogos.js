@@ -87,24 +87,26 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, 
     ? `Cotações REAIS completas disponíveis na ${nomeCasa}:\n${dadosOdds.mercadosTexto}` 
     : `Utilize cotações realistas de mercado.`;
 
-  const prompt = `Você é um Tipster Profissional de Elite focado em estratégias de Crescimento Seguro de Banca.
+  const prompt = `Você é um Tipster Profissional de Elite e Analista Tático de Dados Avançados.
   Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
   Casa de Apostas de Referência: ${nomeCasa}
   
   ${contextoOdds}
   
-  SUA MISSÃO: Montar uma sugestão de "Criar Aposta" (combinada do mesmo jogo) utilizando o catálogo da ${nomeCasa} com uma **ODD FINAL MÁXIMA DE 2.00** (restrinja o valor final estritamente entre 1.45 e 2.00). 
-  Selecione 2 submercados altamente complementares e seguros (Exemplo: Empate Anula ou Chance Dupla + Menos de 3.5 Gols, ou Favorito para vencer em algum tempo + Menos de 4.5 gols) que multipliquem suas cotações reais para atingir um alvo seguro de até 2.00.
-  
-  REGRA ABSOLUTA 1: O campo "odd" DEVE ser o resultado da multiplicação matemática das opções escolhidas e **nunca pode ultrapassar 2.00**.
-  REGRA ABSOLUTA 2: O nome do mercado deve vir precedido de "Criar Aposta:" detalhando os dois submercados combinados.
+  SUA MISSÃO: Fornecer DUAS opções de apostas profissionais baseadas em todo o catálogo da ${nomeCasa}:
+  1. **Aposta Principal**: A melhor entrada isolada de maior valor (+EV) do jogo (pode ser Resultado Final, DNB, Gols, Handicap, Escanteios, etc.) com sua odd real e análise tática.
+  2. **Criar Aposta (Segunda Opção)**: Uma combinada do mesmo jogo utilizando submercados complementares com **ODD FINAL MÁXIMA DE 2.00** (entre 1.45 e 2.00).
   
   Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
-    "market": "Criar Aposta: Empate Anula (${homeTeam}) + Menos de 3.5 Gols",
-    "odd": 1.85, 
-    "confidence": 92, 
-    "analysis": "Explicação técnica de 3 frases justificando por que essa combinada de baixo risco e odd controlada abaixo de 2.00 maximiza os lucros com segurança."
+    "mainMarket": "Nome exato do mercado principal (ex: Vitória ${homeTeam} ou Mais de 9.5 Escanteios)",
+    "mainOdd": 1.75,
+    "mainConfidence": 88,
+    "mainAnalysis": "Explicação técnica de 3 frases da aposta principal.",
+    "criarApostaMarket": "Criar Aposta: Empate Anula (${homeTeam}) + Menos de 3.5 Gols",
+    "criarApostaOdd": 1.85,
+    "criarApostaConfidence": 90,
+    "criarApostaAnalysis": "Explicação técnica de 3 frases justificando o Criar Aposta com odd controlada."
   }`;
 
   try {
@@ -162,9 +164,10 @@ module.exports = async function handler(req, res) {
       const dadosOdds = await buscarTodosOsMercados(fixtureId, apiFootballKey);
       const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
 
-      if (tipInfo && tipInfo.market && tipInfo.analysis) {
-        let oddFinal = Number(tipInfo.odd);
-        if (oddFinal > 2.00) oddFinal = 1.95;
+      if (tipInfo && tipInfo.mainMarket && tipInfo.mainAnalysis) {
+        let oddPrincipal = Number(tipInfo.mainOdd);
+        let oddCriarAposta = Number(tipInfo.criarApostaOdd || 1.85);
+        if (oddCriarAposta > 2.00) oddCriarAposta = 1.95;
 
         const fallbackCasas = ["Bet365", "Betano", "Superbet"];
         const casaEscolhida = dadosOdds ? dadosOdds.bookmaker : fallbackCasas[Math.floor(Math.random() * fallbackCasas.length)];
@@ -173,10 +176,18 @@ module.exports = async function handler(req, res) {
           matchName: `${homeTeam} vs ${awayTeam}`,
           league,
           country: item.league.country || "Internacional",
-          market: tipInfo.market,
-          odd: oddFinal,
-          confidence: Number(tipInfo.confidence),
-          analysis: tipInfo.analysis,
+          
+          // Aposta Principal (Padrão Antigo)
+          market: tipInfo.mainMarket,
+          odd: oddPrincipal,
+          confidence: Number(tipInfo.mainConfidence || 88),
+          analysis: tipInfo.mainAnalysis,
+
+          // Segunda Opção: Criar Aposta (Até Odd 2.00)
+          criarApostaMarket: tipInfo.criarApostaMarket,
+          criarApostaOdd: oddCriarAposta,
+          criarApostaAnalysis: tipInfo.criarApostaAnalysis,
+
           bookmaker: casaEscolhida,
           matchDate: item.fixture.date,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -191,7 +202,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `CRIAR APOSTA SEGURO ATIVO (Odd Máxima 2.00): ${palpitesSalvos} jogos processados com combos inteligentes!` 
+      message: `APOSTA PRINCIPAL + CRIAR APOSTA ATIVOS: ${palpitesSalvos} jogos processados com dupla opção por partida!` 
     });
 
   } catch (error) {
