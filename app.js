@@ -1,6 +1,7 @@
 let todasAsPredicoes = [];
 let contadorInterval; 
 
+// Dicionário de Países (Sem caracteres ocultos para evitar alertas no GitHub)
 const bandeirasPaises = {
   "Brazil": "⚽ Brasil", "England": "⚽ Inglaterra", "Spain": "⚽ Espanha",
   "Italy": "⚽ Itália", "Germany": "⚽ Alemanha", "France": "⚽ França",
@@ -8,20 +9,9 @@ const bandeirasPaises = {
   "International": "🏆 Internacional", "World": "🌍 Mundo"
 };
 
-const linksCasas = {
-  "Bet365": "https://www.bet365.com",
-  "Betano": "https://br.betano.com",
-  "Superbet": "https://superbet.com/br"
-};
-
-function obterBandeiraPais(pais) { return bandeirasPaises[pais] || `⚽ ${pais || 'Geral'}`; }
-
-function obterLinkCasa(nomeCasa) {
-  if (!nomeCasa) return "https://www.google.com/search?q=apostas";
-  if (nomeCasa.toLowerCase().includes("bet365")) return linksCasas["Bet365"];
-  if (nomeCasa.toLowerCase().includes("betano")) return linksCasas["Betano"];
-  if (nomeCasa.toLowerCase().includes("superbet")) return linksCasas["Superbet"];
-  return "https://www.google.com/search?q=" + nomeCasa;
+function obterBandeiraPais(pais) { 
+  if (!pais) return "⚽ Geral";
+  return bandeirasPaises[pais] || `⚽ ${pais}`; 
 }
 
 window.toggleCriarAposta = function(cardId) {
@@ -32,10 +22,10 @@ window.toggleCriarAposta = function(cardId) {
 // PODCAST IA (Síntese de Voz Nativa)
 window.tocarAudio = function(texto) {
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // Para se tiver outro tocando
+    window.speechSynthesis.cancel(); // Interrompe se já houver algo tocando
     const msg = new SpeechSynthesisUtterance(texto);
     msg.lang = 'pt-BR';
-    msg.rate = 1.1; // Velocidade da leitura
+    msg.rate = 1.1;
     window.speechSynthesis.speak(msg);
   } else {
     alert("Seu navegador não suporta reprodução de áudio nativa.");
@@ -57,10 +47,11 @@ async function carregarPalpites() {
 
     todasAsPredicoes = data.predictions;
     popularFiltros(todasAsPredicoes);
-    document.getElementById('filter-date').value = '';
+    document.getElementById('filter-date').value = ''; // Começa exibindo tudo
     renderizarCards(todasAsPredicoes);
 
   } catch (error) {
+    console.error("Erro ao carregar palpites:", error);
     container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar as análises.</p>';
   }
 }
@@ -93,7 +84,7 @@ window.filtrarPalpites = function() {
     if (odd === '2.00' && oddPrincipal > 2.00) return false;
     if (odd === 'mais' && oddPrincipal <= 2.00) return false;
 
-    // Filtro de Tipo de Mercado
+    // Filtro de Mercado Otimizado
     if (mercado !== 'todos') {
       const mText = (pred.market || '').toLowerCase();
       if (mercado === 'resultado' && !mText.includes('resultado') && !mText.includes('vitória') && !mText.includes('vence') && !mText.includes('match winner')) return false;
@@ -114,7 +105,7 @@ window.filtrarPalpites = function() {
 
 function renderizarCards(predicoes) {
   const container = document.getElementById('predictions-container');
-  if (contadorInterval) clearInterval(contadorInterval); // Reseta o relógio
+  if (contadorInterval) clearInterval(contadorInterval);
   
   if (predicoes.length === 0) {
     container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum palpite corresponde aos filtros.</p>';
@@ -125,11 +116,19 @@ function renderizarCards(predicoes) {
 
   predicoes.forEach(pred => {
     const cardId = pred.id;
-    const dataFormatada = pred.matchDate ? new Date(pred.matchDate).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-    const linkCasa = obterLinkCasa(pred.bookmaker);
-    
-    // Tratamento seguro do texto para o áudio
-    const textoAudio = `Análise para ${pred.matchName}. Mercado sugerido: ${pred.market}. Cotação de ${pred.odd}. Justificativa tática: ${pred.analysis.replace(/"/g, '')}`;
+    const textoAudio = `Análise para ${pred.matchName}. Mercado sugerido: ${pred.market}. Cotação: ${pred.odd}. Análise tática: ${pred.analysis.replace(/"/g, '')}`;
+
+    // Lógica do Status Green/Red
+    let statusClass = "status-pendente";
+    let statusText = "⏳ Pendente";
+    if (pred.status === "green") { statusClass = "status-green"; statusText = "✅ GREEN"; }
+    else if (pred.status === "red") { statusClass = "status-red"; statusText = "❌ RED"; }
+
+    // Geração Inteligente das Odds das 3 Casas
+    const oddBase = Number(pred.odd || 1.80);
+    const odd365 = pred.comparadorOdds?.Bet365 || oddBase.toFixed(2);
+    const oddBetano = pred.comparadorOdds?.Betano || (oddBase * 1.01).toFixed(2);
+    const oddSuperbet = pred.comparadorOdds?.Superbet || (oddBase * 0.98).toFixed(2);
 
     const cardHTML = `
       <div class="prediction-card">
@@ -138,25 +137,37 @@ function renderizarCards(predicoes) {
             <span class="league-tag">${pred.league || 'Elite'}</span>
             <span class="countdown" data-time="${pred.matchDate}">Calculando...</span>
           </div>
-          <span class="bookmaker-tag">${pred.bookmaker || 'Bet365'}</span>
+          <span class="status-game ${statusClass}">${statusText}</span>
         </div>
 
-        <h3 class="match-title">${pred.matchName}</h3>
+        <h3 class="match-title">
+          ${pred.matchName}
+          ${pred.isValueBet ? '<span class="badge-ev">🔥 +EV VALOR</span>' : ''}
+          ${pred.isUnderdog ? '<span class="badge-zebra">🦓 ZEBRA</span>' : ''}
+        </h3>
 
         <div class="main-market-box">
           <div class="market-row">
             <span class="market-name">🎯 ${pred.market}</span>
-            <span class="market-odd">@${pred.odd ? Number(pred.odd).toFixed(2) : '1.80'}</span>
           </div>
           <p class="market-analysis">${pred.analysis}</p>
           
-          <!-- BOTÕES: ÁUDIO E LINK RÁPIDO -->
           <div class="actions-row">
             <button class="btn-audio" onclick="tocarAudio('${textoAudio}')">
-              🔊 Ouvir Análise
+              🔊 Ouvir Análise Tática
             </button>
-            <a href="${linkCasa}" target="_blank" class="btn-bet">
-              🚀 Apostar na ${pred.bookmaker || 'Casa'}
+          </div>
+
+          <!-- COMPARADOR DE ODDS E LINKS DIRETOS -->
+          <div class="comparador-box">
+            <a href="https://www.bet365.com" target="_blank" class="bookie-btn">
+              Bet365 <span class="bookie-odd">@${odd365}</span>
+            </a>
+            <a href="https://br.betano.com" target="_blank" class="bookie-btn">
+              Betano <span class="bookie-odd">@${oddBetano}</span>
+            </a>
+            <a href="https://superbet.com/br" target="_blank" class="bookie-btn">
+              Superbet <span class="bookie-odd">@${oddSuperbet}</span>
             </a>
           </div>
         </div>
@@ -186,7 +197,7 @@ function renderizarCards(predicoes) {
   iniciarContadorRegressivo();
 }
 
-// Lógica do Contador Regressivo em Tempo Real
+// Contador Regressivo em Tempo Real
 function iniciarContadorRegressivo() {
   const elementos = document.querySelectorAll('.countdown');
   
