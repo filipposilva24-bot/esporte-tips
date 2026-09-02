@@ -31,7 +31,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
   
   REGRA ABSOLUTA: NÃO diversifique só por diversificar. Escolha o mercado que faça TOTAL SENTIDO LÓGICO para a realidade tática destas duas equipes. Se o jogo tem um franco favorito, analise Handicaps. Se são times reativos, analise o Under.
   
-  Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra):
+  Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
     "market": "Nome do Mercado",
     "odd": 1.85, 
@@ -49,7 +49,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       })
     });
 
-    if (!response.ok) throw new Error("Rate limit ou bloqueio da IA.");
+    if (!response.ok) throw new Error("Bloqueio da IA (Rate Limit).");
 
     const data = await response.json();
     if (!data.candidates || !data.candidates[0]) return null;
@@ -58,7 +58,8 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(textResult);
   } catch (error) {
-    return null; // Falhou? Não salva lixo. Retorna nulo.
+    console.error(`Falha na IA para ${homeTeam} vs ${awayTeam}:`, error.message);
+    return null; // Falhou? Retorna nulo.
   }
 }
 
@@ -73,7 +74,6 @@ export default async function handler(req, res) {
   try {
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     
-    // 1. Puxa TODOS os jogos do dia na API-Sports
     const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, {
       headers: { 'x-apisports-key': apiFootballKey }
     });
@@ -82,7 +82,6 @@ export default async function handler(req, res) {
     const data = await response.json();
     const matches = data.response || [];
 
-    // 2. Busca no Firebase quais jogos de hoje já foram analisados
     const snapshot = await db.collection('predictions').get();
     const jogosJaSalvos = new Set();
     
@@ -93,18 +92,17 @@ export default async function handler(req, res) {
         }
     });
 
-    // 3. Filtra apenas os jogos que a IA ainda não analisou
     const jogosPendentes = matches.filter(item => !jogosJaSalvos.has(item.fixture.id));
 
     if (jogosPendentes.length === 0) {
-      return res.status(200).json({ success: true, message: `Excelente! Todos os ${matches.length} jogos de hoje já foram analisados e salvos no banco.` });
+      return res.status(200).json({ success: true, message: `Excelente! Todos os jogos de hoje já foram analisados e salvos no banco.` });
     }
 
-    // 4. LOTE DE SEGURANÇA: Pega apenas 10 jogos por vez para não ser bloqueado pelo Google
     const loteDeHoje = jogosPendentes.slice(0, 10); 
     let palpitesSalvos = 0;
 
-    const promessasDeAnalise = loteDeHoje.map(async (item) => {
+    // A MÁGICA ACONTECE AQUI: Loop sequencial (um de cada vez)
+    for (const item of loteDeHoje) {
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
@@ -127,13 +125,14 @@ export default async function handler(req, res) {
         await db.collection('predictions').doc(String(item.fixture.id)).set(predictionData, { merge: true });
         palpitesSalvos++;
       }
-    });
-
-    await Promise.all(promessasDeAnalise);
+      
+      // Delay de 1.5 segundos entre as chamadas para esfriar a IA do Google e evitar bloqueios
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
 
     return res.status(200).json({ 
       success: true, 
-      message: `LOTE CONCLUÍDO! ${palpitesSalvos} novos jogos foram analisados a fundo. Ainda faltam ${jogosPendentes.length - palpitesSalvos} jogos para fechar o dia. Recarregue esta página para processar mais 10!` 
+      message: `LOTE CONCLUÍDO! ${palpitesSalvos} de ${loteDeHoje.length} novos jogos foram analisados a fundo. Ainda faltam ${jogosPendentes.length - loteDeHoje.length} jogos na fila.` 
     });
 
   } catch (error) {
