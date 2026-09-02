@@ -31,8 +31,11 @@ if (bankrollInput) {
 // Função auxiliar para verificar se o jogo é realmente hoje no Brasil
 function isJogoHojeBrasil(matchDateISO) {
     if (!matchDateISO) return false;
-    const hojeBR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-    const dataJogoBR = new Date(matchDateISO).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+    const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const hojeBR = new Date().toLocaleDateString('pt-BR', options); 
+    const dataJogoBR = new Date(matchDateISO).toLocaleDateString('pt-BR', options);
+
     return dataJogoBR === hojeBR;
 }
 
