@@ -39,8 +39,8 @@ const LIGAS_DE_ELITE_IDS = [
   128  // Liga Profesional (Argentina)
 ];
 
-// Busca os mercados e odds reais diretamente das casas de aposta
-async function buscarOddsReais(fixtureId, apiFootballKey) {
+// Busca múltiplos mercados reais (1X2, Empate Anula / Draw No Bet, Gols) nas casas oficiais
+async function buscarOddsAvancadas(fixtureId, apiFootballKey) {
   try {
     const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, {
       headers: { 'x-apisports-key': apiFootballKey }
@@ -56,21 +56,28 @@ async function buscarOddsReais(fixtureId, apiFootballKey) {
     for (const casaNome of casasAlvo) {
       const bk = bookmakers.find(b => b.name.toLowerCase().includes(casaNome.toLowerCase()));
       if (bk && bk.bets && bk.bets.length > 0) {
-        // Mapeia os mercados disponíveis para a IA escolher o de maior valor com a odd exata
-        const mercadosFormatados = bk.bets.map(b => {
-          const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
-          return `- ${b.name}: [${valores}]`;
-        }).join('\n');
+        let resumoMercados = [];
+        
+        bk.bets.forEach(b => {
+          const nome = b.name.toLowerCase();
+          // Filtra mercados profissionais principais: Match Winner (1X2), Draw No Bet (Empate Anula), Over/Under Gols
+          if (nome.includes("match winner") || nome.includes("draw no bet") || nome.includes("goals over/under") || b.id === 1 || b.id === 3) {
+            const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
+            resumoMercados.push(`- ${b.name}: [${valores}]`);
+          }
+        });
 
-        return {
-          bookmaker: bk.name,
-          mercadosTexto: mercadosFormatados
-        };
+        if (resumoMercados.length > 0) {
+          return {
+            bookmaker: bk.name,
+            mercadosTexto: resumoMercados.join('\n')
+          };
+        }
       }
     }
     return null;
   } catch (error) {
-    console.error(`Erro ao buscar odds para fixture ${fixtureId}:`, error);
+    console.error(`Erro ao buscar odds avançadas para fixture ${fixtureId}:`, error);
     return null;
   }
 }
@@ -79,7 +86,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, 
   if (!apiKeyGemini) return null;
 
   const contextoOdds = dadosOdds 
-    ? `Cotações reais disponíveis na ${dadosOdds.bookmaker}:\n${dadosOdds.mercadosTexto}` 
+    ? `Cotações REAIS disponíveis na ${dadosOdds.bookmaker} para este jogo:\n${dadosOdds.mercadosTexto}` 
     : `Utilize cotações realistas de mercado.`;
 
   const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
@@ -87,14 +94,15 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, 
   
   ${contextoOdds}
   
-  SUA MISSÃO: Analisar a partida taticamente e escolher a melhor aposta de VALOR (+EV). Você DEVE utilizar obrigatoriamente os nomes de mercados e as odds REAIS fornecidas na lista acima (por exemplo, se escolher Empate Anula a Aposta, utilize exatamente a odd correspondente listada).
+  SUA MISSÃO: Analisar a partida taticamente e escolher a melhor aposta de valor (+EV). Você pode escolher mercados como Vitória Simples, Empate Anula a Aposta (Draw No Bet) ou Gols Over/Under. 
+  REGRA OBRIGATÓRIA: O nome do mercado e a "odd" retornados DEVEM corresponder exatamente aos valores e cotações reais listados na casa acima. Se escolher Empate Anula, use o nome exato e a odd exata da opção de Draw No Bet da lista.
   
   Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
-    "market": "Nome exato do mercado (ex: Empate Anula a Aposta: Palmeiras)",
+    "market": "Empate Anula a Aposta: ${homeTeam}",
     "odd": 2.00, 
     "confidence": 88, 
-    "analysis": "Explicação técnica de 3 frases justificando a escolha e o valor tático."
+    "analysis": "Explicação técnica de 3 frases justificando o valor tático com base no confronto."
   }`;
 
   try {
@@ -140,13 +148,7 @@ export default async function handler(req, res) {
     const allMatches = data.response || [];
 
     const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
-
-    const snapshot = await db.collection('predictions').get();
-    
-    // Para atualizar o jogo do Palmeiras se já existir, vamos permitir sobrescrever ou reprocessar
-    const jogosPendentes = matches; // Processa os jogos do dia
-
-    const loteDeHoje = jogosPendentes.slice(0, 5); 
+    const loteDeHoje = matches.slice(0, 5); 
     let palpitesSalvos = 0;
 
     for (const item of loteDeHoje) {
@@ -155,9 +157,7 @@ export default async function handler(req, res) {
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
       
-      // Busca as odds reais completas da Bet365, Betano ou Superbet
-      const dadosOdds = await buscarOddsReais(fixtureId, apiFootballKey);
-
+      const dadosOdds = await buscarOddsAvancadas(fixtureId, apiFootballKey);
       const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
 
       if (tipInfo && tipInfo.market && tipInfo.analysis) {
@@ -183,7 +183,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `ODDS REAIS ATUALIZADAS: ${palpitesSalvos} jogos sincronizados com cotações exatas das casas!` 
+      message: `MERCADOS AVANÇADOS SINCRONIZADOS: ${palpitesSalvos} jogos atualizados com cotações reais de DNB e 1X2 da Bet365/Betano!` 
     });
 
   } catch (error) {
