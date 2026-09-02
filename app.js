@@ -28,6 +28,14 @@ if (bankrollInput) {
     });
 }
 
+// Função auxiliar para verificar se o jogo é realmente hoje no Brasil
+function isJogoHojeBrasil(matchDateISO) {
+    if (!matchDateISO) return false;
+    const hojeBR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const dataJogoBR = new Date(matchDateISO).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    return dataJogoBR === hojeBR;
+}
+
 // 2. Renderizar Palpites Filtrando Rigorosamente por Hoje e pelos Menus
 function renderPredictions() {
     const container = document.getElementById('tips-container');
@@ -38,15 +46,9 @@ function renderPredictions() {
     if (!container) return;
     container.innerHTML = "";
 
-    // Pega a data de hoje formatada no fuso do Brasil (YYYY-MM-DD)
-    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
     let filtered = allPredictions.filter(tip => {
-        // Trava de segurança rigorosa: se não tiver data ou se a data não for estritamente hoje, descarta
-        if (!tip.matchDate) return false;
-        
-        const dataJogo = tip.matchDate.split('T')[0];
-        if (dataJogo !== hojeStr) return false;
+        // Trava de fuso horário: converte UTC para Brasil antes de verificar se é hoje
+        if (!isJogoHojeBrasil(tip.matchDate)) return false;
 
         const matchCountry = tip.country || "Internacional";
         const matchLeague = tip.league || "Geral";
@@ -96,12 +98,10 @@ function renderPredictions() {
     });
 }
 
-// 3. Popular Dropdowns Dinamicamente considerando apenas jogos de hoje
+// 3. Popular Dropdowns Dinamicamente considerando apenas jogos de hoje no Brasil
 function populateFilters() {
     const countrySelect = document.getElementById('countryFilter');
-    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
-    const jogosDeHoje = allPredictions.filter(p => p.matchDate && p.matchDate.split('T')[0] === hojeStr);
+    const jogosDeHoje = allPredictions.filter(p => isJogoHojeBrasil(p.matchDate));
 
     const countries = [...new Set(jogosDeHoje.map(p => p.country || "Internacional"))].sort();
     
@@ -116,9 +116,8 @@ function populateFilters() {
 function updateLeaguesDropdown() {
     const countrySelect = document.getElementById('countryFilter').value;
     const leagueSelect = document.getElementById('leagueFilter');
-    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
-    let availableLeagues = allPredictions.filter(p => p.matchDate && p.matchDate.split('T')[0] === hojeStr);
+    
+    let availableLeagues = allPredictions.filter(p => isJogoHojeBrasil(p.matchDate));
     
     if (countrySelect !== 'todos') {
         availableLeagues = availableLeagues.filter(p => (p.country || "Internacional") === countrySelect);
