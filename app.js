@@ -1,7 +1,6 @@
 let todasAsPredicoes = [];
 let contadorInterval; 
 
-// Dicionário de Países (Sem caracteres ocultos para evitar alertas no GitHub)
 const bandeirasPaises = {
   "Brazil": "⚽ Brasil", "England": "⚽ Inglaterra", "Spain": "⚽ Espanha",
   "Italy": "⚽ Itália", "Germany": "⚽ Alemanha", "France": "⚽ França",
@@ -9,26 +8,22 @@ const bandeirasPaises = {
   "International": "🏆 Internacional", "World": "🌍 Mundo"
 };
 
-function obterBandeiraPais(pais) { 
-  if (!pais) return "⚽ Geral";
-  return bandeirasPaises[pais] || `⚽ ${pais}`; 
-}
+function obterBandeiraPais(pais) { return bandeirasPaises[pais] || `⚽ ${pais || 'Geral'}`; }
 
 window.toggleCriarAposta = function(cardId) {
   const el = document.getElementById(`criar-aposta-${cardId}`);
   if (el) el.style.display = (el.style.display === "none" || el.style.display === "") ? "block" : "none";
 };
 
-// PODCAST IA (Síntese de Voz Nativa)
 window.tocarAudio = function(texto) {
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // Interrompe se já houver algo tocando
+    window.speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(texto);
     msg.lang = 'pt-BR';
     msg.rate = 1.1;
     window.speechSynthesis.speak(msg);
   } else {
-    alert("Seu navegador não suporta reprodução de áudio nativa.");
+    alert("Navegador sem suporte a áudio.");
   }
 };
 
@@ -47,11 +42,9 @@ async function carregarPalpites() {
 
     todasAsPredicoes = data.predictions;
     popularFiltros(todasAsPredicoes);
-    document.getElementById('filter-date').value = ''; // Começa exibindo tudo
+    document.getElementById('filter-date').value = '';
     renderizarCards(todasAsPredicoes);
-
   } catch (error) {
-    console.error("Erro ao carregar palpites:", error);
     container.innerHTML = '<p style="text-align: center; color: #ef4444; padding: 20px;">Erro ao carregar as análises.</p>';
   }
 }
@@ -59,7 +52,6 @@ async function carregarPalpites() {
 function popularFiltros(predicoes) {
   const selectCountry = document.getElementById('filter-country');
   const selectLeague = document.getElementById('filter-league');
-  
   const paises = [...new Set(predicoes.map(p => p.country || 'International'))].sort();
   const ligas = [...new Set(predicoes.map(p => p.league))].sort();
 
@@ -84,19 +76,16 @@ window.filtrarPalpites = function() {
     if (odd === '2.00' && oddPrincipal > 2.00) return false;
     if (odd === 'mais' && oddPrincipal <= 2.00) return false;
 
-    // Filtro de Mercado Otimizado
     if (mercado !== 'todos') {
       const mText = (pred.market || '').toLowerCase();
-      if (mercado === 'resultado' && !mText.includes('resultado') && !mText.includes('vitória') && !mText.includes('vence') && !mText.includes('match winner')) return false;
-      if (mercado === 'gols' && !mText.includes('gol') && !mText.includes('over') && !mText.includes('under') && !mText.includes('mais de') && !mText.includes('menos de')) return false;
-      if (mercado === 'dupla' && !mText.includes('chance dupla') && !mText.includes('empate anula') && !mText.includes('dnb')) return false;
+      if (mercado === 'resultado' && !mText.includes('resultado') && !mText.includes('vitória') && !mText.includes('vence')) return false;
+      if (mercado === 'gols' && !mText.includes('gol') && !mText.includes('over') && !mText.includes('under')) return false;
+      if (mercado === 'dupla' && !mText.includes('chance dupla') && !mText.includes('empate anula')) return false;
     }
 
     if (data && pred.matchDate) {
-      const dataJogo = pred.matchDate.split('T')[0];
-      if (dataJogo !== data) return false;
+      if (pred.matchDate.split('T')[0] !== data) return false;
     }
-
     return true;
   });
 
@@ -118,17 +107,25 @@ function renderizarCards(predicoes) {
     const cardId = pred.id;
     const textoAudio = `Análise para ${pred.matchName}. Mercado sugerido: ${pred.market}. Cotação: ${pred.odd}. Análise tática: ${pred.analysis.replace(/"/g, '')}`;
 
-    // Lógica do Status Green/Red
     let statusClass = "status-pendente";
     let statusText = "⏳ Pendente";
     if (pred.status === "green") { statusClass = "status-green"; statusText = "✅ GREEN"; }
     else if (pred.status === "red") { statusClass = "status-red"; statusText = "❌ RED"; }
 
-    // Geração Inteligente das Odds das 3 Casas
     const oddBase = Number(pred.odd || 1.80);
     const odd365 = pred.comparadorOdds?.Bet365 || oddBase.toFixed(2);
     const oddBetano = pred.comparadorOdds?.Betano || (oddBase * 1.01).toFixed(2);
     const oddSuperbet = pred.comparadorOdds?.Superbet || (oddBase * 0.98).toFixed(2);
+
+    // Barras de Força Mandante vs Visitante
+    const hStr = Number(pred.homeStrength) || 75;
+    const aStr = Number(pred.awayStrength) || 70;
+    const totalStr = hStr + aStr;
+    const hPct = Math.round((hStr / totalStr) * 100);
+    const aPct = 100 - hPct;
+    const teams = pred.matchName.split(' vs ');
+    const homeName = teams[0] || 'Mandante';
+    const awayName = teams[1] || 'Visitante';
 
     const cardHTML = `
       <div class="prediction-card">
@@ -146,6 +143,25 @@ function renderizarCards(predicoes) {
           ${pred.isUnderdog ? '<span class="badge-zebra">🦓 ZEBRA</span>' : ''}
         </h3>
 
+        <!-- GRÁFICO DE BARRAS DE FORÇA -->
+        <div class="strength-bar-container">
+          <div class="strength-row">
+            <span>🏠 ${homeName} (${hPct}%)</span>
+            <span>✈️ ${awayName} (${aPct}%)</span>
+          </div>
+          <div class="bars-wrapper">
+            <div class="bar-home" style="width: ${hPct}%;"></div>
+            <div class="bar-away" style="width: ${aPct}%;"></div>
+          </div>
+        </div>
+
+        <!-- NOTAS TÁTICAS AVANÇADAS -->
+        <div class="tactical-notes">
+          <div class="tactical-note-item">⚡ <b>Rivalidade:</b> ${pred.rivalryNote || 'Regular'}</div>
+          <div class="tactical-note-item">⚖️ <b>Árbitro:</b> ${pred.refereeNote || 'Padrão'}</div>
+          <div class="tactical-note-item" style="grid-column: span 2;">🩺 <b>Elenco:</b> ${pred.injuryNote || 'Disponíveis'}</div>
+        </div>
+
         <div class="main-market-box">
           <div class="market-row">
             <span class="market-name">🎯 ${pred.market}</span>
@@ -154,11 +170,11 @@ function renderizarCards(predicoes) {
           
           <div class="actions-row">
             <button class="btn-audio" onclick="tocarAudio('${textoAudio}')">
-              🔊 Ouvir Análise Tática
+              🔊 Ouvir Análise Tática (Podcast)
             </button>
           </div>
 
-          <!-- COMPARADOR DE ODDS E LINKS DIRETOS -->
+          <!-- COMPARADOR DE ODDS -->
           <div class="comparador-box">
             <a href="https://www.bet365.com" target="_blank" class="bookie-btn">
               Bet365 <span class="bookie-odd">@${odd365}</span>
@@ -197,24 +213,17 @@ function renderizarCards(predicoes) {
   iniciarContadorRegressivo();
 }
 
-// Contador Regressivo em Tempo Real
 function iniciarContadorRegressivo() {
   const elementos = document.querySelectorAll('.countdown');
-  
   function atualizarTempo() {
     const agora = new Date().getTime();
-    
     elementos.forEach(el => {
       const tempoJogoStr = el.getAttribute('data-time');
-      if (!tempoJogoStr) { el.innerHTML = ''; return; }
-      
-      const tempoJogo = new Date(tempoJogoStr).getTime();
-      const distancia = tempoJogo - agora;
-
+      if (!tempoJogoStr) return;
+      const distancia = new Date(tempoJogoStr).getTime() - agora;
       if (distancia < 0) {
-        el.innerHTML = "🔴 Ao Vivo / Encerrado";
+        el.innerHTML = "🔴 Ao Vivo";
         el.style.color = "#f87171";
-        el.style.background = "rgba(248, 113, 113, 0.1)";
       } else {
         const h = Math.floor((distancia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const m = Math.floor((distancia % (1000 * 60 * 60)) / (1000 * 60));
@@ -223,7 +232,6 @@ function iniciarContadorRegressivo() {
       }
     });
   }
-  
   atualizarTempo();
   contadorInterval = setInterval(atualizarTempo, 1000);
 }
