@@ -1,5 +1,25 @@
 let todasAsPredicoes = [];
 
+// Dicionário para associar países às suas respectivas bandeiras
+const bandeirasPaises = {
+  "Brazil": "🇧🇷 Brasil",
+  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra",
+  "Spain": "🇪🇸 Espanha",
+  "Italy": "🇮🇹 Itália",
+  "Germany": "🇩🇪 Alemanha",
+  "France": "🇫🇷 França",
+  "Portugal": "🇵🇹 Portugal",
+  "Netherlands": "🇳🇱 Holanda",
+  "Argentina": "🇦🇷 Argentina",
+  "International": "🏆 Internacional",
+  "World": "🌍 Mundo"
+};
+
+function obterBandeiraPais(pais) {
+  if (!pais) return "🏳️ Geral";
+  return bandeirasPaises[pais] || `🏳️ ${pais}`;
+}
+
 window.toggleCriarAposta = function(cardId) {
   const el = document.getElementById(`criar-aposta-${cardId}`);
   if (el) {
@@ -22,6 +42,11 @@ async function carregarPalpites() {
 
     todasAsPredicoes = data.predictions;
     popularFiltros(todasAsPredicoes);
+    
+    // Define a data de hoje como padrão no calendário ao carregar
+    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    document.getElementById('filter-date').value = ''; // Começa sem filtro de data para ver tudo ou ajuste se preferir
+
     renderizarCards(todasAsPredicoes);
 
   } catch (error) {
@@ -34,39 +59,37 @@ function popularFiltros(predicoes) {
   const selectCountry = document.getElementById('filter-country');
   const selectLeague = document.getElementById('filter-league');
   
-  const paises = [...new Set(predicoes.map(p => p.country))].sort();
+  const paises = [...new Set(predicoes.map(p => p.country || 'International'))].sort();
   const ligas = [...new Set(predicoes.map(p => p.league))].sort();
 
-  selectCountry.innerHTML = '<option value="todos">Todos os Países</option>' + paises.map(c => `<option value="${c}">${c}</option>`).join('');
-  selectLeague.innerHTML = '<option value="todos">Todas as Ligas</option>' + ligas.map(l => `<option value="${l}">${l}</option>`).join('');
+  selectCountry.innerHTML = '<option value="todos">🌍 Todos os Países</option>' + paises.map(c => `<option value="${c}">${obterBandeiraPais(c)}</option>`).join('');
+  selectLeague.innerHTML = '<option value="todos">🏆 Todas as Ligas</option>' + ligas.map(l => `<option value="${l}">${l}</option>`).join('');
 }
 
 window.filtrarPalpites = function() {
   const paisSelecionado = document.getElementById('filter-country').value;
   const ligaSelecionada = document.getElementById('filter-league').value;
   const oddSelecionada = document.getElementById('filter-odd').value;
-  const dataSelecionada = document.getElementById('filter-date').value;
-
-  const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const dataSelecionada = document.getElementById('filter-date').value; // Valor do calendário (YYYY-MM-DD)
 
   const filtrados = todasAsPredicoes.filter(pred => {
     // Filtro País
-    if (paisSelecionado !== 'todos' && pred.country !== paisSelecionado) return false;
+    if (paisSelecionado !== 'todos' && (pred.country || 'International') !== paisSelecionado) return false;
     
     // Filtro Liga
     if (ligaSelecionada !== 'todos' && pred.league !== ligaSelecionada) return false;
     
-    // Filtro Odd (Principal ou Criar Aposta)
+    // Filtro Odd
     const oddPrincipal = Number(pred.odd || 0);
     if (oddSelecionada === '1.50' && oddPrincipal > 1.50) return false;
     if (oddSelecionada === '1.80' && oddPrincipal > 1.80) return false;
     if (oddSelecionada === '2.00' && oddPrincipal > 2.00) return false;
     if (oddSelecionada === 'mais' && oddPrincipal <= 2.00) return false;
 
-    // Filtro Data / Histórico
-    if (dataSelecionada === 'hoje' && pred.matchDate) {
+    // Filtro Calendário (Data exata escolhida)
+    if (dataSelecionada && pred.matchDate) {
       const dataJogo = pred.matchDate.split('T')[0];
-      if (dataJogo !== hojeStr) return false;
+      if (dataJogo !== dataSelecionada) return false;
     }
 
     return true;
@@ -88,6 +111,7 @@ function renderizarCards(predicoes) {
   predicoes.forEach(pred => {
     const cardId = pred.id;
     const dataFormatada = pred.matchDate ? new Date(pred.matchDate).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const paisFormatado = obterBandeiraPais(pred.country);
 
     const cardHTML = `
       <div class="prediction-card">
@@ -126,7 +150,7 @@ function renderizarCards(predicoes) {
         </div>
 
         <div class="card-footer">
-           <span style="font-size: 0.75rem; color: #64748b;">País: ${pred.country || 'Geral'}</span>
+           <span style="font-size: 0.8rem; color: #94a3b8;">${paisFormatado}</span>
            <span>Confiança da IA: <span class="confidence-badge">${pred.confidence || 88}%</span></span>
         </div>
       </div>
