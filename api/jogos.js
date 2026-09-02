@@ -49,7 +49,12 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       })
     });
 
-    if (!response.ok) throw new Error("Bloqueio da IA (Rate Limit).");
+    // Se o Google recusar, capturamos e imprimimos o erro exato nos logs da Vercel
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`ERRO DO GOOGLE GEMINI (${response.status}) para ${homeTeam} vs ${awayTeam}:`, errorText);
+      return null;
+    }
 
     const data = await response.json();
     if (!data.candidates || !data.candidates[0]) return null;
@@ -58,8 +63,8 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(textResult);
   } catch (error) {
-    console.error(`Falha na IA para ${homeTeam} vs ${awayTeam}:`, error.message);
-    return null; // Falhou? Retorna nulo.
+    console.error(`EXCEÇÃO NA IA para ${homeTeam} vs ${awayTeam}:`, error.message);
+    return null;
   }
 }
 
@@ -101,7 +106,6 @@ export default async function handler(req, res) {
     const loteDeHoje = jogosPendentes.slice(0, 10); 
     let palpitesSalvos = 0;
 
-    // A MÁGICA ACONTECE AQUI: Loop sequencial (um de cada vez)
     for (const item of loteDeHoje) {
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
@@ -126,7 +130,7 @@ export default async function handler(req, res) {
         palpitesSalvos++;
       }
       
-      // Delay de 1.5 segundos entre as chamadas para esfriar a IA do Google e evitar bloqueios
+      // Delay de 1.5 segundos entre as requisições para proteger contra bloqueios
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
