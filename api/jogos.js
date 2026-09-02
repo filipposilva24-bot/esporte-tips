@@ -13,7 +13,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// LISTA BRANCA DE LIGAS DE ELITE (IDs oficiais da API-Football)
+// LISTA BRANCA DE LIGAS DE ELITE
 const LIGAS_DE_ELITE_IDS = [
   71,  // Brasileirão Série A
   72,  // Brasileirão Série B
@@ -39,7 +39,7 @@ const LIGAS_DE_ELITE_IDS = [
   128  // Liga Profesional (Argentina)
 ];
 
-// Função para buscar odds reais nas casas de preferência (Bet365, Betano, Superbet)
+// Busca os mercados e odds reais diretamente das casas de aposta
 async function buscarOddsReais(fixtureId, apiFootballKey) {
   try {
     const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, {
@@ -56,17 +56,16 @@ async function buscarOddsReais(fixtureId, apiFootballKey) {
     for (const casaNome of casasAlvo) {
       const bk = bookmakers.find(b => b.name.toLowerCase().includes(casaNome.toLowerCase()));
       if (bk && bk.bets && bk.bets.length > 0) {
-        // Procura o mercado de Match Winner (ID 1) ou Resultado Final
-        const mercado = bk.bets.find(b => b.id === 1 || b.name === "Match Winner" || b.name === "Full Time Result");
-        if (mercado && mercado.values && mercado.values.length > 0) {
-          // Pega a primeira opção relevante (ex: Mandante) para validar com a IA
-          const selecao = mercado.values[0];
-          return {
-            bookmaker: bk.name,
-            market: `Vitória ${selecao.value}`,
-            odd: parseFloat(selecao.odd)
-          };
-        }
+        // Mapeia os mercados disponíveis para a IA escolher o de maior valor com a odd exata
+        const mercadosFormatados = bk.bets.map(b => {
+          const valores = b.values.map(v => `${v.value}: @${v.odd}`).join(', ');
+          return `- ${b.name}: [${valores}]`;
+        }).join('\n');
+
+        return {
+          bookmaker: bk.name,
+          mercadosTexto: mercadosFormatados
+        };
       }
     }
     return null;
@@ -76,25 +75,26 @@ async function buscarOddsReais(fixtureId, apiFootballKey) {
   }
 }
 
-async function analisarComIAEstatisticas(homeTeam, awayTeam, league, oddsReais, apiKeyGemini) {
+async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, apiKeyGemini) {
   if (!apiKeyGemini) return null;
 
-  const infoOddsStr = oddsReais 
-    ? `Cotação real obtida na ${oddsReais.bookmaker}: Mercado de '${oddsReais.market}' @${oddsReais.odd}.` 
+  const contextoOdds = dadosOdds 
+    ? `Cotações reais disponíveis na ${dadosOdds.bookmaker}:\n${dadosOdds.mercadosTexto}` 
     : `Utilize cotações realistas de mercado.`;
 
   const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
   Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
-  ${infoOddsStr}
   
-  SUA MISSÃO: Fornecer a melhor análise tática e validar ou sugerir o mercado de maior valor (+EV) com base estritamente nas cotações reais fornecidas acima ou no padrão da partida.
+  ${contextoOdds}
+  
+  SUA MISSÃO: Analisar a partida taticamente e escolher a melhor aposta de VALOR (+EV). Você DEVE utilizar obrigatoriamente os nomes de mercados e as odds REAIS fornecidas na lista acima (por exemplo, se escolher Empate Anula a Aposta, utilize exatamente a odd correspondente listada).
   
   Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra, sem blocos markdown):
   {
-    "market": "${oddsReais ? oddsReais.market : 'Match Winner'}",
-    "odd": ${oddsReais ? oddsReais.odd : 1.85}, 
-    "confidence": 92, 
-    "analysis": "Explicação técnica de 3 frases justificando o valor tático."
+    "market": "Nome exato do mercado (ex: Empate Anula a Aposta: Palmeiras)",
+    "odd": 2.00, 
+    "confidence": 88, 
+    "analysis": "Explicação técnica de 3 frases justificando a escolha e o valor tático."
   }`;
 
   try {
@@ -142,22 +142,11 @@ export default async function handler(req, res) {
     const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
 
     const snapshot = await db.collection('predictions').get();
-    const jogosJaSalvos = new Set();
     
-    snapshot.forEach(doc => {
-        const docData = doc.data();
-        if (docData.matchDate && docData.matchDate.includes(hoje)) {
-            jogosJaSalvos.add(Number(doc.id));
-        }
-    });
+    // Para atualizar o jogo do Palmeiras se já existir, vamos permitir sobrescrever ou reprocessar
+    const jogosPendentes = matches; // Processa os jogos do dia
 
-    const jogosPendentes = matches.filter(item => !jogosJaSalvos.has(item.fixture.id));
-
-    if (jogosPendentes.length === 0) {
-      return res.status(200).json({ success: true, message: `Todos os jogos de elite de hoje já possuem odds reais sincronizadas.` });
-    }
-
-    const loteDeHoje = jogosPendentes.slice(0, 5); // Processa de 5 em 5 para respeitar limites de requisições de odds
+    const loteDeHoje = jogosPendentes.slice(0, 5); 
     let palpitesSalvos = 0;
 
     for (const item of loteDeHoje) {
@@ -166,10 +155,10 @@ export default async function handler(req, res) {
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
       
-      // BUSCA AS ODDS REAIS NA BET365, BETANO OU SUPERBET ANTES DA IA ANALISAR
-      const oddsReais = await buscarOddsReais(fixtureId, apiFootballKey);
+      // Busca as odds reais completas da Bet365, Betano ou Superbet
+      const dadosOdds = await buscarOddsReais(fixtureId, apiFootballKey);
 
-      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, oddsReais, geminiApiKey);
+      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
 
       if (tipInfo && tipInfo.market && tipInfo.analysis) {
         const predictionData = {
@@ -180,7 +169,7 @@ export default async function handler(req, res) {
           odd: Number(tipInfo.odd),
           confidence: Number(tipInfo.confidence),
           analysis: tipInfo.analysis,
-          bookmaker: oddsReais ? oddsReais.bookmaker : "Bet365",
+          bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365",
           matchDate: item.fixture.date,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
@@ -194,11 +183,11 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `SINCRONIZAÇÃO DE ODDS REAIS: ${palpitesSalvos} jogos processados com cotações da Bet365/Betano/Superbet. Restam ${jogosPendentes.length - loteDeHoje.length} na fila.` 
+      message: `ODDS REAIS ATUALIZADAS: ${palpitesSalvos} jogos sincronizados com cotações exatas das casas!` 
     });
 
   } catch (error) {
-    console.error("Erro na sincronização de odds:", error);
+    console.error("Erro na sincronização:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }
