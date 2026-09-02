@@ -8,34 +8,64 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
     body { background-color: #0f172a; color: #f8fafc; padding: 20px; }
-    header { display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto 20px auto; padding-bottom: 15px; border-bottom: 1px solid #1e293b; }
+    
+    header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      max-width: 800px; 
+      margin: 0 auto 20px auto; 
+      padding-bottom: 15px; 
+      border-bottom: 1px solid #1e293b; 
+    }
     .logo { font-size: 1.5rem; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 8px; }
     .status-badge { background: #059669; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
     
-    /* Barra de Filtros Profissional */
+    /* Barra de Filtros Profissional Ajustada */
     .filters-bar {
       max-width: 800px;
-      margin: 0 auto 20px auto;
+      margin: 0 auto 24px auto;
       background: #1e293b;
-      padding: 14px;
+      padding: 16px;
       border-radius: 12px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 14px;
       border: 1px solid #334155;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .filter-group { display: flex; flexDirection: column; gap: 4px; }
-    .filter-group label { font-size: 0.75rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+    .filter-group { 
+      display: flex; 
+      flex-direction: column; 
+      gap: 6px; 
+    }
+    .filter-group label { 
+      font-size: 0.75rem; 
+      color: #94a3b8; 
+      font-weight: 700; 
+      text-transform: uppercase; 
+      letter-spacing: 0.5px;
+    }
     .filter-group select, .filter-group input {
       background: #0f172a;
-      border: 1px solid #334155;
+      border: 1px solid #475569;
       color: white;
-      padding: 8px;
-      border-radius: 6px;
-      font-size: 0.85rem;
+      padding: 9px 10px;
+      border-radius: 8px;
+      font-size: 0.88rem;
       outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
     }
-    .filter-group select:focus, .filter-group input:focus { border-color: #38bdf8; }
+    .filter-group select:focus, .filter-group input:focus { 
+      border-color: #38bdf8; 
+    }
+    
+    /* Estilização do input date para combinar com o tema dark */
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+    }
 
     .container { max-width: 800px; margin: 0 auto; }
     .prediction-card { background: #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); border: 1px solid #334155; }
@@ -63,36 +93,33 @@
     <div class="status-badge">● Online</div>
   </header>
 
-  <!-- BARRA DE FILTROS E HISTÓRICO -->
+  <!-- BARRA DE FILTROS COM CALENDÁRIO E BANDEIRAS -->
   <div class="filters-bar">
     <div class="filter-group">
       <label>País</label>
       <select id="filter-country" onchange="filtrarPalpites()">
-        <option value="todos">Todos os Países</option>
+        <option value="todos">🌍 Todos os Países</option>
       </select>
     </div>
     <div class="filter-group">
       <label>Liga</label>
       <select id="filter-league" onchange="filtrarPalpites()">
-        <option value="todos">Todas as Ligas</option>
+        <option value="todos">🏆 Todas as Ligas</option>
       </select>
     </div>
     <div class="filter-group">
       <label>Faixa de Odd</label>
       <select id="filter-odd" onchange="filtrarPalpites()">
-        <option value="todos">Todas as Odds</option>
+        <option value="todos">📊 Todas as Odds</option>
         <option value="1.50">Até @1.50</option>
         <option value="1.80">Até @1.80</option>
-        <option value="2.00">Até @2.00 (Criar Aposta)</option>
+        <option value="2.00">⚡ Até @2.00 (Criar Aposta)</option>
         <option value="mais">Acima de @2.00</option>
       </select>
     </div>
     <div class="filter-group">
-      <label>Data / Histórico</label>
-      <select id="filter-date" onchange="filtrarPalpites()">
-        <option value="todos">Todo o Histórico</option>
-        <option value="hoje">Apenas Hoje</option>
-      </select>
+      <label>Data (Calendário)</label>
+      <input type="date" id="filter-date" onchange="filtrarPalpites()">
     </div>
   </div>
 
