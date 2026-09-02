@@ -21,12 +21,13 @@ const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_
 const dateFilterInput = document.getElementById('dateFilter');
 const countryFilter = document.getElementById('countryFilter');
 const leagueFilter = document.getElementById('leagueFilter');
+const bookmakerFilter = document.getElementById('bookmakerFilter');
 const bankrollInput = document.getElementById('bankrollInput');
 const suggestedStake = document.getElementById('suggestedStake');
 const container = document.getElementById('predictionsContainer');
 const matchCount = document.getElementById('matchCount');
 
-// Inicializa o input com a data de hoje e escuta mudanças de data
+// Inicializa o input com a data de hoje e escuta mudanças
 if (dateFilterInput) {
   dateFilterInput.value = hojeStr;
   dateFilterInput.addEventListener('change', (e) => {
@@ -48,7 +49,7 @@ window.addEventListener('DOMContentLoaded', () => {
   carregarPalpitesPorData(hojeStr);
 });
 
-// Busca palpites do Firebase filtrando pela data selecionada com ajuste de fuso horário
+// Busca palpites do Firebase filtrando pela data selecionada com fuso do Brasil
 async function carregarPalpitesPorData(dataAlvo) {
   container.innerHTML = `
     <div class="col-span-full text-center py-16">
@@ -63,11 +64,14 @@ async function carregarPalpitesPorData(dataAlvo) {
     snapshot.forEach(doc => {
       const data = doc.data();
       if (data.matchDate) {
-        // Converte a data do banco para o fuso de São Paulo antes de comparar
         const dataJogoLocal = new Date(data.matchDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
         
         if (dataJogoLocal === dataAlvo) {
-          allPredictions.push({ id: doc.id, ...data });
+          // Se o documento não tiver uma casa definida, atribuímos uma rotação padrão entre as 3 principais para demonstração
+          const casasPadrao = ["Bet365", "Betano", "Superbet"];
+          const casaDefinitiva = data.bookmaker || casasPadrao[Math.abs(doc.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % casasPadrao.length];
+          
+          allPredictions.push({ id: doc.id, ...data, bookmaker: casaDefinitiva });
         }
       }
     });
@@ -85,7 +89,7 @@ async function carregarPalpitesPorData(dataAlvo) {
   }
 }
 
-// Popula os selects de países e ligas dinamicamente com base nos dados do dia
+// Popula os selects dinamicamente
 function povoarFiltros(predictions) {
   const paises = [...new Set(predictions.map(p => p.country))].filter(Boolean).sort();
   const ligas = [...new Set(predictions.map(p => p.league))].filter(Boolean).sort();
@@ -103,16 +107,21 @@ function povoarFiltros(predictions) {
 
 countryFilter.addEventListener('change', aplicarFiltros);
 leagueFilter.addEventListener('change', aplicarFiltros);
+if (bookmakerFilter) {
+  bookmakerFilter.addEventListener('change', aplicarFiltros);
+}
 
-// Aplica os filtros de país e liga nos cards exibidos
+// Aplica os filtros combinados (País, Liga e Casa de Aposta)
 function aplicarFiltros() {
   const paisSelecionado = countryFilter.value;
   const ligaSelecionada = leagueFilter.value;
+  const casaSelecionada = bookmakerFilter ? bookmakerFilter.value : '';
 
   const filtrados = allPredictions.filter(p => {
     const matchPais = !paisSelecionado || p.country === paisSelecionado;
     const matchLiga = !ligaSelecionada || p.league === ligaSelecionada;
-    return matchPais && matchLiga;
+    const matchCasa = !casaSelecionada || p.bookmaker === casaSelecionada;
+    return matchPais && matchLiga && matchCasa;
   });
 
   renderizarCards(filtrados);
@@ -125,8 +134,8 @@ function renderizarCards(predictions) {
   if (predictions.length === 0) {
     container.innerHTML = `
       <div class="col-span-full text-center py-16 bg-slate-900/40 rounded-2xl border border-slate-800">
-        <p class="text-slate-400 text-sm font-medium">Nenhum palpite encontrado para esta data ou filtro.</p>
-        <p class="text-slate-500 text-xs mt-1">Selecione outra data no calendário acima.</p>
+        <p class="text-slate-400 text-sm font-medium">Nenhum palpite encontrado para esta casa ou filtro.</p>
+        <p class="text-slate-500 text-xs mt-1">Tente selecionar outra casa de aposta ou data acima.</p>
       </div>
     `;
     return;
@@ -135,13 +144,21 @@ function renderizarCards(predictions) {
   container.innerHTML = predictions.map(p => {
     const horaMatch = p.matchDate ? new Date(p.matchDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
     
+    // Cores personalizadas para a tag da casa de aposta
+    let corCasa = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    if (p.bookmaker === "Betano") corCasa = "bg-red-500/10 text-red-400 border-red-500/20";
+    if (p.bookmaker === "Superbet") corCasa = "bg-purple-500/10 text-purple-400 border-purple-500/20";
+
     return `
       <div class="bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 flex flex-col justify-between shadow-xl transition">
         <div>
           <!-- Cabeçalho do Card -->
           <div class="flex items-center justify-between text-xs text-slate-400 mb-3">
             <span class="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50 font-medium text-slate-300">${p.league}</span>
-            <span class="font-mono bg-slate-950 px-2.5 py-0.5 rounded text-amber-400 font-semibold">${horaMatch}</span>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md border text-[10px] font-bold ${corCasa}">${p.bookmaker}</span>
+              <span class="font-mono bg-slate-950 px-2 py-0.5 rounded text-amber-400 font-semibold">${horaMatch}</span>
+            </div>
           </div>
 
           <!-- Times -->
