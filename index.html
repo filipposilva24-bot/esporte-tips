@@ -3,79 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FutTips - Melhores Palpites</title>
-    <!-- Tailwind CSS via CDN -->
+    <title>FUTTIPS - Análises Táticas de Elite</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased pb-12">
-
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+    
     <!-- Header -->
     <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
-        <div class="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
-            <h1 class="text-lg font-black tracking-wider text-emerald-400">⚡ FUT<span class="text-white">TIPS</span></h1>
-            <span class="text-xs bg-emerald-500/10 text-emerald-400 font-semibold px-2.5 py-1 rounded-full border border-emerald-500/20">Online</span>
+        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-amber-400 text-xl font-black italic tracking-wider">⚡ FUTTIPS</span>
+            </div>
+            <div class="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-semibold">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Online
+            </div>
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="max-w-md mx-auto p-4 space-y-6">
-
-        <!-- Widget de Gestão de Banca -->
-        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-            <h2 class="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">💰 Gestão de Banca Rápida</h2>
-            <div class="grid grid-cols-2 gap-3">
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        
+        <!-- Bankroll Management -->
+        <section class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+                💰 Gestão de Banca Rápida
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label class="text-xs text-slate-400 block mb-1">Sua Banca (R$)</label>
-                    <input type="number" id="bankroll" value="100" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    <label class="block text-xs text-slate-400 mb-1">Sua Banca (R$)</label>
+                    <input type="number" id="bankrollInput" value="100" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400 transition">
                 </div>
                 <div>
-                    <label class="text-xs text-slate-400 block mb-1">Stake Sugerida (2%)</label>
-                    <div id="stake-result" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm font-bold text-emerald-400 flex items-center">
+                    <label class="block text-xs text-slate-400 mb-1">Stake Sugerida (2%)</label>
+                    <div id="suggestedStake" class="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-2.5 text-emerald-400 font-bold text-lg flex items-center">
                         R$ 2.00
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Seção de Palpites do Dia -->
-        <section>
-            <div class="flex justify-between items-center mb-3">
-                <h2 class="text-base font-bold text-white">🔥 Melhores Palpites do Dia</h2>
-                <span class="text-xs text-slate-400">Ao Vivo / Pré-live</span>
+        <!-- Filters Bar -->
+        <section class="flex flex-wrap items-center gap-3 bg-slate-900/40 p-3 rounded-2xl border border-slate-800/80">
+            <!-- Seletor de Histórico por Data -->
+            <div class="flex items-center gap-2 bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-700">
+                <span class="text-xs text-slate-400 font-medium">Data:</span>
+                <input type="date" id="dateFilter" class="bg-slate-950 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-amber-400">
             </div>
 
-            <!-- Filtros Avançados: País, Liga e Mercado -->
-            <div class="space-y-2 mb-4">
-                <div class="grid grid-cols-2 gap-2">
-                    <select id="countryFilter" class="bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl p-2.5 focus:outline-none focus:border-emerald-500 font-semibold">
-                        <option value="todos">🌍 Todos os Países</option>
-                    </select>
-                    <select id="leagueFilter" class="bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl p-2.5 focus:outline-none focus:border-emerald-500 font-semibold">
-                        <option value="todos">🏆 Todas as Ligas</option>
-                    </select>
-                </div>
-                <div>
-                    <select id="marketFilter" class="w-full bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl p-2.5 focus:outline-none focus:border-emerald-500 font-semibold">
-                        <option value="todos">🔍 Todos os Mercados</option>
-                        <option value="Over 2.5 Gols">Over 2.5 Gols</option>
-                        <option value="Ambas Marcam (BTTS)">Ambas Marcam (BTTS)</option>
-                        <option value="Mais de 9.5 Cantos">Mais de 9.5 Cantos</option>
-                        <option value="Over 1.5 Gols">Over 1.5 Gols</option>
-                        <option value="Empate Anula (Casa)">Empate Anula (Casa)</option>
-                        <option value="Handicap Asiático -0.5">Handicap Asiático -0.5</option>
-                    </select>
-                </div>
+            <!-- Filtro de País -->
+            <div class="flex-1 min-w-[140px]">
+                <select id="countryFilter" class="w-full bg-slate-900 text-slate-200 text-xs px-3 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400">
+                    <option value="">🌍 Todos os Países</option>
+                </select>
             </div>
 
-            <!-- Feed onde os jogos sincronizados vão aparecer automaticamente -->
-            <div id="tips-container" class="space-y-4">
-                <p class="text-xs text-slate-500 text-center py-4">Buscando jogos do dia...</p>
+            <!-- Filtro de Liga -->
+            <div class="flex-1 min-w-[140px]">
+                <select id="leagueFilter" class="w-full bg-slate-900 text-slate-200 text-xs px-3 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400">
+                    <option value="">🏆 Todas as Ligas</option>
+                </select>
             </div>
         </section>
 
+        <!-- Section Title -->
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                🔥 Melhores Palpites do Dia
+            </h3>
+            <span id="matchCount" class="text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">Carregando...</span>
+        </div>
+
+        <!-- Cards Container -->
+        <div id="predictionsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Cards injetados via JavaScript -->
+        </div>
+
     </main>
 
-    <!-- Script principal -->
-    <script type="module" src="app.js"></script>
+    <!-- Firebase Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
