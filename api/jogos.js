@@ -13,6 +13,38 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// LISTA BRANCA DE LIGAS DE ELITE (IDs oficiais da API-Football)
+// Apenas competições principais do Brasil, Europa, Américas e Internacionais
+const LIGAS_DE_ELITE_IDS = [
+  // Brasil
+  71,  // Brasileirão Série A
+  72,  // Brasileirão Série B
+  73,  // Copa do Brasil
+  11,  // Campeonato Paulista
+  
+  // Europa - Principais Ligas Nacionais
+  39,  // Premier League (Inglaterra)
+  40,  // Championship (Inglaterra)
+  140, // La Liga (Espanha)
+  141, // La Liga 2 (Espanha)
+  135, // Serie A (Itália)
+  136, // Serie B (Itália)
+  78,  // Bundesliga (Alemanha)
+  79,  // 2. Bundesliga (Alemanha)
+  61,  // Ligue 1 (França)
+  62,  // Ligue 2 (França)
+  94,  // Primeira Liga (Portugal)
+  88,  // Eredivisie (Holanda)
+
+  // Internacionais e Continentais
+  2,   // UEFA Champions League
+  3,   // UEFA Europa League
+  848, // UEFA Conference League
+  13,  // Copa Libertadores
+  11,  // Copa Sudamericana
+  128  // Liga Profesional (Argentina)
+];
+
 async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemini) {
   if (!apiKeyGemini) return null;
 
@@ -49,7 +81,6 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       })
     });
 
-    // Se o Google recusar, capturamos e imprimimos o erro exato nos logs da Vercel
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`ERRO DO GOOGLE GEMINI (${response.status}) para ${homeTeam} vs ${awayTeam}:`, errorText);
@@ -85,7 +116,10 @@ export default async function handler(req, res) {
     
     if (!response.ok) throw new Error(`Erro API-Sports`);
     const data = await response.json();
-    const matches = data.response || [];
+    const allMatches = data.response || [];
+
+    // FILTRAGEM CIRÚRGICA: Mantém apenas os jogos que pertencem às ligas de elite
+    const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
 
     const snapshot = await db.collection('predictions').get();
     const jogosJaSalvos = new Set();
@@ -100,7 +134,7 @@ export default async function handler(req, res) {
     const jogosPendentes = matches.filter(item => !jogosJaSalvos.has(item.fixture.id));
 
     if (jogosPendentes.length === 0) {
-      return res.status(200).json({ success: true, message: `Excelente! Todos os jogos de hoje já foram analisados e salvos no banco.` });
+      return res.status(200).json({ success: true, message: `Excelente! Todos os jogos das principais ligas de hoje já foram analisados e salvos no banco.` });
     }
 
     const loteDeHoje = jogosPendentes.slice(0, 10); 
@@ -130,13 +164,12 @@ export default async function handler(req, res) {
         palpitesSalvos++;
       }
       
-      // Delay de 1.5 segundos entre as requisições para proteger contra bloqueios
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
     return res.status(200).json({ 
       success: true, 
-      message: `LOTE CONCLUÍDO! ${palpitesSalvos} de ${loteDeHoje.length} novos jogos foram analisados a fundo. Ainda faltam ${jogosPendentes.length - loteDeHoje.length} jogos na fila.` 
+      message: `LOTE DE ELITE CONCLUÍDO! ${palpitesSalvos} de ${loteDeHoje.length} jogos principais analisados. Ainda faltam ${jogosPendentes.length - loteDeHoje.length} jogos de peso na fila.` 
     });
 
   } catch (error) {
