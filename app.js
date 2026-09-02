@@ -1,15 +1,3 @@
-// Configuração do Firebase (Substitua com suas credenciais do projeto se necessário)
-const firebaseConfig = {
-  // Insira sua configuração do Firebase Web SDK aqui se já não estiver embutida, 
-  // ou utilize o carregamento padrão se o projeto já estiver integrado.
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
-const db = firebase.firestore();
-
 // Função global para alternar a gaveta do Criar Aposta
 window.toggleCriarAposta = function(cardId) {
   const el = document.getElementById(`criar-aposta-${cardId}`);
@@ -22,24 +10,24 @@ window.toggleCriarAposta = function(cardId) {
   }
 };
 
-// Carrega os palpites salvos no Firestore
+// Carrega os palpites direto da nossa API segura
 async function carregarPalpites() {
   const container = document.getElementById('predictions-container');
   container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 20px;">Carregando análises de elite...</p>';
 
   try {
-    const snapshot = await db.collection('predictions').orderBy('createdAt', 'desc').get();
+    const response = await fetch('/api/palpites');
+    const data = await response.json();
     
-    if (snapshot.empty) {
+    if (!data.success || !data.predictions || data.predictions.length === 0) {
       container.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 20px;">Nenhum palpite encontrado para hoje. Execute a API para gerar novas entradas.</p>';
       return;
     }
 
     container.innerHTML = '';
 
-    snapshot.forEach(doc => {
-      const pred = doc.data();
-      const cardId = doc.id;
+    data.predictions.forEach(pred => {
+      const cardId = pred.id;
       const temCriarAposta = pred.criarApostaMarket ? true : false;
 
       const cardHTML = `
