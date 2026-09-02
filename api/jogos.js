@@ -13,32 +13,30 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Nova Função Analítica e Estrita
 async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemini) {
   if (!apiKeyGemini) return null;
 
-  // Prompt focado em +EV (Expected Value) e Análise Real
   const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
   Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
   
   SUA MISSÃO: Usar seu conhecimento histórico sobre o padrão tático, força ofensiva/defensiva e momento atual destas equipes para encontrar a APOSTA DE MAIOR VALOR (+EV).
   
   MERCADOS PARA AVALIAÇÃO:
-  - Match Odds (Vitória Casa, Vitória Fora, Empate)
+  - Match Odds (Vitória, Empate)
   - Empate Anula a Aposta (DNB) e Dupla Hipótese
   - Handicaps Asiáticos (ex: -1.0, +0.5, etc.)
   - Gols: Over/Under (ex: Over 1.5, Under 2.5, Over 0.5 HT)
   - Ambas as Equipes Marcam (Sim/Não)
-  - Escanteios e Cartões (Se fizer sentido para o padrão dos times)
+  - Escanteios (Over/Under)
   
-  REGRA ABSOLUTA: NÃO diversifique mercados só por diversificar. Escolha o mercado que faça TOTAL SENTIDO LÓGICO para a realidade e disparidade técnica destas duas equipes. Se o jogo tem um franco favorito, analise Handicaps. Se são times reativos, analise o Under. O foco é a LEITURA PERFEITA DO JOGO.
+  REGRA ABSOLUTA: NÃO diversifique só por diversificar. Escolha o mercado que faça TOTAL SENTIDO LÓGICO para a realidade tática destas duas equipes. Se o jogo tem um franco favorito, analise Handicaps. Se são times reativos, analise o Under.
   
-  Retorne ESTRITAMENTE um objeto JSON válido (sem markdown, sem texto extra):
+  Retorne ESTRITAMENTE um objeto JSON válido (sem texto extra):
   {
-    "market": "Nome Oficial do Mercado Escolhido",
+    "market": "Nome do Mercado",
     "odd": 1.85, 
     "confidence": 92, 
-    "analysis": "Explicação técnica de 3 frases do porquê esta linha específica tem extremo valor baseada no comportamento real e padrão tático destas duas equipes."
+    "analysis": "Explicação técnica de 3 frases justificando o valor."
   }`;
 
   try {
@@ -47,24 +45,20 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7 // Temperatura balanceada: criatividade suficiente para encontrar bons mercados, mas focada em precisão.
-        }
+        generationConfig: { temperature: 0.7 }
       })
     });
 
-    if (!response.ok) throw new Error("Rate limit ou erro na API do Gemini.");
+    if (!response.ok) throw new Error("Rate limit ou bloqueio da IA.");
 
     const data = await response.json();
-    if (!data.candidates || !data.candidates[0]) throw new Error("Resposta vazia da IA.");
+    if (!data.candidates || !data.candidates[0]) return null;
     
     let textResult = data.candidates[0].content.parts[0].text;
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(textResult);
   } catch (error) {
-    // Retorna NULL para não salvar palpites falsos/genéricos no banco
-    console.error(`Erro na IA para ${homeTeam} vs ${awayTeam}`);
-    return null; 
+    return null; // Falhou? Não salva lixo. Retorna nulo.
   }
 }
 
@@ -79,51 +73,58 @@ export default async function handler(req, res) {
   try {
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     
+    // 1. Puxa TODOS os jogos do dia na API-Sports
     const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, {
       headers: { 'x-apisports-key': apiFootballKey }
     });
     
-    if (!response.ok) {
-      throw new Error(`Erro API-Sports (Status ${response.status})`);
-    }
-
+    if (!response.ok) throw new Error(`Erro API-Sports`);
     const data = await response.json();
     const matches = data.response || [];
 
-    if (matches.length === 0) {
-      return res.status(200).json({ success: true, message: `Nenhum jogo encontrado para hoje.` });
+    // 2. Busca no Firebase quais jogos de hoje já foram analisados
+    const snapshot = await db.collection('predictions').get();
+    const jogosJaSalvos = new Set();
+    
+    snapshot.forEach(doc => {
+        const docData = doc.data();
+        if (docData.matchDate && docData.matchDate.includes(hoje)) {
+            jogosJaSalvos.add(Number(doc.id));
+        }
+    });
+
+    // 3. Filtra apenas os jogos que a IA ainda não analisou
+    const jogosPendentes = matches.filter(item => !jogosJaSalvos.has(item.fixture.id));
+
+    if (jogosPendentes.length === 0) {
+      return res.status(200).json({ success: true, message: `Excelente! Todos os ${matches.length} jogos de hoje já foram analisados e salvos no banco.` });
     }
 
-    // Como 335 gera Rate Limit do Google e derruba a Vercel, pegamos uma amostra alta porém segura.
-    const jogosParaAnalisar = matches; 
-
+    // 4. LOTE DE SEGURANÇA: Pega apenas 10 jogos por vez para não ser bloqueado pelo Google
+    const loteDeHoje = jogosPendentes.slice(0, 10); 
     let palpitesSalvos = 0;
 
-    const promessasDeAnalise = jogosParaAnalisar.map(async (item) => {
+    const promessasDeAnalise = loteDeHoje.map(async (item) => {
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
-      const country = item.league.country || "Internacional";
-      const matchId = item.fixture.id;
-      const matchDate = item.fixture.date;
       
       const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, geminiApiKey);
 
-      // SÓ SALVA NO BANCO SE A IA REALMENTE CONSEGUIU ANALISAR (não é mais lixo automático)
       if (tipInfo && tipInfo.market && tipInfo.analysis) {
         const predictionData = {
           matchName: `${homeTeam} vs ${awayTeam}`,
           league,
-          country,
+          country: item.league.country || "Internacional",
           market: tipInfo.market,
           odd: Number(tipInfo.odd),
           confidence: Number(tipInfo.confidence),
           analysis: tipInfo.analysis,
-          matchDate: matchDate,
+          matchDate: item.fixture.date,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('predictions').doc(String(matchId)).set(predictionData, { merge: true });
+        await db.collection('predictions').doc(String(item.fixture.id)).set(predictionData, { merge: true });
         palpitesSalvos++;
       }
     });
@@ -132,7 +133,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `Processamento concluído. ${palpitesSalvos} palpites de ALTÍSSIMA QUALIDADE foram gerados e salvos!` 
+      message: `LOTE CONCLUÍDO! ${palpitesSalvos} novos jogos foram analisados a fundo. Ainda faltam ${jogosPendentes.length - palpitesSalvos} jogos para fechar o dia. Recarregue esta página para processar mais 10!` 
     });
 
   } catch (error) {
