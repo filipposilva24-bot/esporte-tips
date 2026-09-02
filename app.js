@@ -1,11 +1,12 @@
-// Configuração do Firebase para o projeto FutTips
+// Configuração real do Firebase para o projeto FutTips
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "futtips.firebaseapp.com",
-  projectId: "futtips",
-  storageBucket: "futtips.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyAd0jnevrRoRT5vdI_xGZuAxDLgRTCfkzY",
+  authDomain: "futtips-7b09f.firebaseapp.com",
+  projectId: "futtips-7b09f",
+  storageBucket: "futtips-7b09f.firebasestorage.app",
+  messagingSenderId: "321560814934",
+  appId: "1:321560814934:web:db7d4226f712a2a7e3e2f7",
+  measurementId: "G-VYP83JBLSN"
 };
 
 if (!firebase.apps.length) {
