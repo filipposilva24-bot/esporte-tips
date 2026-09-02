@@ -47,7 +47,7 @@ window.addEventListener('DOMContentLoaded', () => {
   carregarPalpitesPorData(hojeStr);
 });
 
-// Busca palpites do Firebase filtrando pela data selecionada
+// Busca palpites do Firebase filtrando pela data selecionada com ajuste de fuso horário
 async function carregarPalpitesPorData(dataAlvo) {
   container.innerHTML = `
     <div class="col-span-full text-center py-16">
@@ -61,9 +61,13 @@ async function carregarPalpitesPorData(dataAlvo) {
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      // Compara os primeiros caracteres (YYYY-MM-DD) do matchDate
-      if (data.matchDate && data.matchDate.startsWith(dataAlvo)) {
-        allPredictions.push({ id: doc.id, ...data });
+      if (data.matchDate) {
+        // Converte a data do banco para o fuso de São Paulo antes de comparar
+        const dataJogoLocal = new Date(data.matchDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        
+        if (dataJogoLocal === dataAlvo) {
+          allPredictions.push({ id: doc.id, ...data });
+        }
       }
     });
 
@@ -128,7 +132,7 @@ function renderizarCards(predictions) {
   }
 
   container.innerHTML = predictions.map(p => {
-    const horaMatch = p.matchDate ? new Date(p.matchDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+    const horaMatch = p.matchDate ? new Date(p.matchDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '';
     
     return `
       <div class="bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 flex flex-col justify-between shadow-xl transition">
