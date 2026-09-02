@@ -19,7 +19,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       market: "Ambas Marcam (BTTS)",
       odd: 1.80,
       confidence: 85,
-      analysis: `Análise avançada para ${homeTeam} vs ${awayTeam} na ${league}. Confronto estudado com base no comportamento tático recente das equipes.`
+      analysis: `Análise avançada para ${homeTeam} vs ${awayTeam} na ${league}. Confronto estudado com base no comportamento tático recente.`
     };
   }
 
@@ -67,34 +67,32 @@ export default async function handler(req, res) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   
   if (!apiFootballKey) {
-    return res.status(500).json({ success: false, error: "FOOTBALL_API_KEY não configurada nas variáveis de ambiente da Vercel." });
+    return res.status(500).json({ success: false, error: "API_FOOTBALL_KEY não configurada." });
   }
 
   try {
     const hoje = new Date().toISOString().split('T')[0];
     
     const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}`, {
-      headers: {
-        'x-apisports-key': apiFootballKey
-      }
+      headers: { 'x-apisports-key': apiFootballKey }
     });
     
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Status ${response.status} - Detalhes: ${errorBody}`);
+      throw new Error(`Erro ao buscar dados na API-Sports: ${response.statusText}`);
     }
 
     const data = await response.json();
     const matches = data.response || [];
 
     if (matches.length === 0) {
-      return res.status(200).json({ success: true, message: `Nenhum jogo encontrado para hoje (${hoje}) na API-Football.` });
+      return res.status(200).json({ success: true, message: `Nenhum jogo encontrado para hoje (${hoje}).` });
     }
 
     const promessasDeAnalise = matches.map(async (item) => {
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
+      const country = item.league.country || "Internacional";
       const matchId = item.fixture.id;
       const matchDate = item.fixture.date;
       
@@ -103,6 +101,7 @@ export default async function handler(req, res) {
       const predictionData = {
         matchName: `${homeTeam} vs ${awayTeam}`,
         league,
+        country,
         market: tipInfo.market,
         odd: Number(tipInfo.odd),
         confidence: Number(tipInfo.confidence),
@@ -118,7 +117,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `${matches.length} partidas sincronizadas com sucesso!` 
+      message: `${matches.length} partidas sincronizadas com países e ligas!` 
     });
 
   } catch (error) {
