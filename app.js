@@ -14,7 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-let allPredictions = []; // Armazena os dados em memória para filtros rápidos
+let allPredictions = [];
 
 // 1. Calculadora de Banca
 const bankrollInput = document.getElementById('bankroll');
@@ -28,7 +28,7 @@ if (bankrollInput) {
     });
 }
 
-// 2. Renderizar Palpites com Base nos Filtros Selecionados
+// 2. Renderizar Palpites Filtrando por Hoje e pelos Menus
 function renderPredictions() {
     const container = document.getElementById('tips-container');
     const selectedCountry = document.getElementById('countryFilter').value;
@@ -38,7 +38,16 @@ function renderPredictions() {
     if (!container) return;
     container.innerHTML = "";
 
+    // Pega a data de hoje formatada no fuso do Brasil (YYYY-MM-DD)
+    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
     let filtered = allPredictions.filter(tip => {
+        // Filtro de Segurança: Garante que exibe apenas jogos cuja data é hoje
+        if (tip.matchDate) {
+            const dataJogo = tip.matchDate.split('T')[0];
+            if (dataJogo !== hojeStr) return false;
+        }
+
         const matchCountry = tip.country || "Internacional";
         const matchLeague = tip.league || "Geral";
         const matchMarket = tip.market || "";
@@ -51,7 +60,7 @@ function renderPredictions() {
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo encontrado para os filtros selecionados.</p>`;
+        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo disponível para hoje com estes filtros.</p>`;
         return;
     }
 
@@ -87,12 +96,14 @@ function renderPredictions() {
     });
 }
 
-// 3. Popular Dropdowns Dinamicamente
+// 3. Popular Dropdowns Dinamicamente considerando apenas jogos de hoje
 function populateFilters() {
     const countrySelect = document.getElementById('countryFilter');
-    const leagueSelect = document.getElementById('leagueFilter');
+    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    const countries = [...new Set(allPredictions.map(p => p.country || "Internacional"))].sort();
+    const jogosDeHoje = allPredictions.filter(p => !p.matchDate || p.matchDate.split('T')[0] === hojeStr);
+
+    const countries = [...new Set(jogosDeHoje.map(p => p.country || "Internacional"))].sort();
     
     countrySelect.innerHTML = `<option value="todos">🌍 Todos os Países</option>`;
     countries.forEach(country => {
@@ -105,10 +116,12 @@ function populateFilters() {
 function updateLeaguesDropdown() {
     const countrySelect = document.getElementById('countryFilter').value;
     const leagueSelect = document.getElementById('leagueFilter');
+    const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    let availableLeagues = allPredictions;
+    let availableLeagues = allPredictions.filter(p => !p.matchDate || p.matchDate.split('T')[0] === hojeStr);
+    
     if (countrySelect !== 'todos') {
-        availableLeagues = allPredictions.filter(p => (p.country || "Internacional") === countrySelect);
+        availableLeagues = availableLeagues.filter(p => (p.country || "Internacional") === countrySelect);
     }
 
     const leagues = [...new Set(availableLeagues.map(p => p.league || "Geral"))].sort();
@@ -119,7 +132,7 @@ function updateLeaguesDropdown() {
     });
 }
 
-// 4. Carregar Dados do Firebase e Inicializar Eventos
+// 4. Carregar Dados do Firebase
 async function loadPredictions() {
     const container = document.getElementById('tips-container');
     if (!container) return;
@@ -133,7 +146,7 @@ async function loadPredictions() {
         });
 
         if (allPredictions.length === 0) {
-            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo sincronizado para hoje.</p>`;
+            container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Nenhum jogo sincronizado.</p>`;
             return;
         }
 
@@ -146,7 +159,6 @@ async function loadPredictions() {
     }
 }
 
-// Event Listeners para os filtros
 document.addEventListener("DOMContentLoaded", () => {
     loadPredictions();
 
