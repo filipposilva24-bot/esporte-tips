@@ -63,11 +63,11 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
 }
 
 export default async function handler(req, res) {
-  const apiFootballKey = process.env.API_FOOTBALL_KEY;
+  const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
   
   if (!apiFootballKey) {
-    return res.status(500).json({ success: false, error: "API_FOOTBALL_KEY não configurada nas variáveis de ambiente da Vercel." });
+    return res.status(500).json({ success: false, error: "FOOTBALL_API_KEY não configurada nas variáveis de ambiente da Vercel." });
   }
 
   try {
