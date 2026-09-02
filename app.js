@@ -28,7 +28,7 @@ if (bankrollInput) {
     });
 }
 
-// 2. Renderizar Palpites Filtrando por Hoje e pelos Menus
+// 2. Renderizar Palpites Filtrando Rigorosamente por Hoje e pelos Menus
 function renderPredictions() {
     const container = document.getElementById('tips-container');
     const selectedCountry = document.getElementById('countryFilter').value;
@@ -42,11 +42,11 @@ function renderPredictions() {
     const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
     let filtered = allPredictions.filter(tip => {
-    // Trava de segurança rigorosa: se não tiver data ou se a data não for estritamente hoje, descarta
-    if (!tip.matchDate) return false;
-
-    const dataJogo = tip.matchDate.split('T')[0];
-    if (dataJogo !== hojeStr) return false;
+        // Trava de segurança rigorosa: se não tiver data ou se a data não for estritamente hoje, descarta
+        if (!tip.matchDate) return false;
+        
+        const dataJogo = tip.matchDate.split('T')[0];
+        if (dataJogo !== hojeStr) return false;
 
         const matchCountry = tip.country || "Internacional";
         const matchLeague = tip.league || "Geral";
@@ -101,7 +101,7 @@ function populateFilters() {
     const countrySelect = document.getElementById('countryFilter');
     const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    const jogosDeHoje = allPredictions.filter(p => !p.matchDate || p.matchDate.split('T')[0] === hojeStr);
+    const jogosDeHoje = allPredictions.filter(p => p.matchDate && p.matchDate.split('T')[0] === hojeStr);
 
     const countries = [...new Set(jogosDeHoje.map(p => p.country || "Internacional"))].sort();
     
@@ -118,7 +118,7 @@ function updateLeaguesDropdown() {
     const leagueSelect = document.getElementById('leagueFilter');
     const hojeStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
-    let availableLeagues = allPredictions.filter(p => !p.matchDate || p.matchDate.split('T')[0] === hojeStr);
+    let availableLeagues = allPredictions.filter(p => p.matchDate && p.matchDate.split('T')[0] === hojeStr);
     
     if (countrySelect !== 'todos') {
         availableLeagues = availableLeagues.filter(p => (p.country || "Internacional") === countrySelect);
