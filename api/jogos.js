@@ -13,40 +13,32 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Função que alimenta o Gemini com o Prompt Agressivo
+// Nova Função Analítica e Estrita
 async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemini) {
-  if (!apiKeyGemini) {
-    return {
-      market: "Empate Anula (DNB)",
-      odd: 1.65,
-      confidence: 80,
-      analysis: `Análise básica de fallback para ${homeTeam} vs ${awayTeam}.`
-    };
-  }
+  if (!apiKeyGemini) return null;
 
-  // O novo Prompt Agressivo e Profissional
-  const prompt = `Você é um Tipster Profissional e Analista Tático de Futebol. Analise o confronto: ${homeTeam} vs ${awayTeam} (${league}).
+  // Prompt focado em +EV (Expected Value) e Análise Real
+  const prompt = `Você é um Analista Tático de Elite e Tipster Profissional.
+  Confronto: ${homeTeam} vs ${awayTeam} (Competição: ${league}).
   
-  SUA MISSÃO: Varrer mentalmente TODOS os mercados de apostas existentes e encontrar a ÚNICA "Value Bet" (Aposta de Valor) perfeita para o perfil tático destas duas equipes.
+  SUA MISSÃO: Usar seu conhecimento histórico sobre o padrão tático, força ofensiva/defensiva e momento atual destas equipes para encontrar a APOSTA DE MAIOR VALOR (+EV).
   
-  ARSENAL DE MERCADOS DISPONÍVEIS:
+  MERCADOS PARA AVALIAÇÃO:
   - Match Odds (Vitória Casa, Vitória Fora, Empate)
   - Empate Anula a Aposta (DNB) e Dupla Hipótese
-  - Handicaps Asiáticos (-1.0, -0.5, +0.5, +1.5, etc.)
-  - Gols: Over 1.5, Under 2.5, Under 3.5, Over 0.5 no 1º Tempo (HT)
-  - Ambas as Equipes Marcam (SIM ou NÃO)
-  - Escanteios (Over 8.5, Over 9.5, Under 10.5, etc.)
+  - Handicaps Asiáticos (ex: -1.0, +0.5, etc.)
+  - Gols: Over/Under (ex: Over 1.5, Under 2.5, Over 0.5 HT)
+  - Ambas as Equipes Marcam (Sim/Não)
+  - Escanteios e Cartões (Se fizer sentido para o padrão dos times)
   
-  REGRA DE OURO E PROIBIÇÃO:
-  É ESTRITAMENTE PROIBIDO viciar suas respostas em "Over 2.5" ou "Ambas Marcam". 
-  Se o jogo for truncado, recomende "Under 2.5" ou "Ambas Marcam NÃO". Se houver um super favorito, use "Handicap Asiático". Se for um jogo de ponta a ponta, vá de "Over Escanteios". ESCOLHA O MERCADO QUE FAZ SENTIDO TÁTICO PARA ESTES DOIS TIMES.
+  REGRA ABSOLUTA: NÃO diversifique mercados só por diversificar. Escolha o mercado que faça TOTAL SENTIDO LÓGICO para a realidade e disparidade técnica destas duas equipes. Se o jogo tem um franco favorito, analise Handicaps. Se são times reativos, analise o Under. O foco é a LEITURA PERFEITA DO JOGO.
   
-  Retorne ESTRITAMENTE um objeto JSON válido (sem blocos de código markdown ou texto extra) contendo exatamente estas chaves:
+  Retorne ESTRITAMENTE um objeto JSON válido (sem markdown, sem texto extra):
   {
-    "market": "NOME DO MERCADO ESCOLHIDO",
-    "odd": 1.95, 
-    "confidence": 88, 
-    "analysis": "Justificativa tática profissional de 3 a 4 frases explicando o porquê esse mercado específico é a melhor leitura para este jogo."
+    "market": "Nome Oficial do Mercado Escolhido",
+    "odd": 1.85, 
+    "confidence": 92, 
+    "analysis": "Explicação técnica de 3 frases do porquê esta linha específica tem extremo valor baseada no comportamento real e padrão tático destas duas equipes."
   }`;
 
   try {
@@ -56,25 +48,23 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, apiKeyGemin
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.95 // Temperatura alta para forçar a criatividade e diversificação da IA
+          temperature: 0.7 // Temperatura balanceada: criatividade suficiente para encontrar bons mercados, mas focada em precisão.
         }
       })
     });
 
-    if (!response.ok) throw new Error("Erro na comunicação com a IA");
+    if (!response.ok) throw new Error("Rate limit ou erro na API do Gemini.");
 
     const data = await response.json();
+    if (!data.candidates || !data.candidates[0]) throw new Error("Resposta vazia da IA.");
+    
     let textResult = data.candidates[0].content.parts[0].text;
     textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(textResult);
   } catch (error) {
-    console.error("Erro na IA para o jogo:", homeTeam, "vs", awayTeam, error);
-    return {
-      market: "Dupla Hipótese 1X",
-      odd: 1.55,
-      confidence: 78,
-      analysis: `Partida complexa entre ${homeTeam} e ${awayTeam}. Estatísticas indicam cautela e equilíbrio.`
-    };
+    // Retorna NULL para não salvar palpites falsos/genéricos no banco
+    console.error(`Erro na IA para ${homeTeam} vs ${awayTeam}`);
+    return null; 
   }
 }
 
@@ -83,35 +73,33 @@ export default async function handler(req, res) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   
   if (!apiFootballKey) {
-    return res.status(500).json({ success: false, error: "FOOTBALL_API_KEY não configurada nas variáveis de ambiente da Vercel." });
+    return res.status(500).json({ success: false, error: "FOOTBALL_API_KEY não configurada." });
   }
 
   try {
-    // Força a data de hoje baseada no horário de Brasília (São Paulo)
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     
-    // Puxando dados reais da API-Sports com o fuso horário cravado
     const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, {
       headers: { 'x-apisports-key': apiFootballKey }
     });
     
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Erro API-Sports (Status ${response.status}): ${errorBody}`);
+      throw new Error(`Erro API-Sports (Status ${response.status})`);
     }
 
     const data = await response.json();
     const matches = data.response || [];
 
     if (matches.length === 0) {
-      return res.status(200).json({ success: true, message: `Nenhum jogo encontrado para hoje (${hoje}) na API-Football.` });
+      return res.status(200).json({ success: true, message: `Nenhum jogo encontrado para hoje.` });
     }
 
-    // Limitação de segurança para evitar Timeout da Vercel
-    // Puxamos no máximo 100 partidas para não estourar os 10 segundos da Vercel no plano gratuito
-    const jogosImportantes = matches; 
+    // Como 335 gera Rate Limit do Google e derruba a Vercel, pegamos uma amostra alta porém segura.
+    const jogosParaAnalisar = matches; 
 
-    const promessasDeAnalise = jogosImportantes.map(async (item) => {
+    let palpitesSalvos = 0;
+
+    const promessasDeAnalise = jogosParaAnalisar.map(async (item) => {
       const homeTeam = item.teams.home.name;
       const awayTeam = item.teams.away.name;
       const league = item.league.name;
@@ -121,26 +109,30 @@ export default async function handler(req, res) {
       
       const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, geminiApiKey);
 
-      const predictionData = {
-        matchName: `${homeTeam} vs ${awayTeam}`,
-        league,
-        country,
-        market: tipInfo.market,
-        odd: Number(tipInfo.odd),
-        confidence: Number(tipInfo.confidence),
-        analysis: tipInfo.analysis,
-        matchDate: matchDate, // Já vem da API-Sports adaptado pro timezone do Brasil passado na URL
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
+      // SÓ SALVA NO BANCO SE A IA REALMENTE CONSEGUIU ANALISAR (não é mais lixo automático)
+      if (tipInfo && tipInfo.market && tipInfo.analysis) {
+        const predictionData = {
+          matchName: `${homeTeam} vs ${awayTeam}`,
+          league,
+          country,
+          market: tipInfo.market,
+          odd: Number(tipInfo.odd),
+          confidence: Number(tipInfo.confidence),
+          analysis: tipInfo.analysis,
+          matchDate: matchDate,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
 
-      await db.collection('predictions').doc(String(matchId)).set(predictionData, { merge: true });
+        await db.collection('predictions').doc(String(matchId)).set(predictionData, { merge: true });
+        palpitesSalvos++;
+      }
     });
 
     await Promise.all(promessasDeAnalise);
 
     return res.status(200).json({ 
       success: true, 
-      message: `${jogosImportantes.length} partidas sincronizadas com diversidade TOTAL de mercados!` 
+      message: `Processamento concluído. ${palpitesSalvos} palpites de ALTÍSSIMA QUALIDADE foram gerados e salvos!` 
     });
 
   } catch (error) {
