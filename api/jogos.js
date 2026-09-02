@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
   try {
@@ -20,7 +20,7 @@ const LIGAS_DE_ELITE_IDS = [
   73,  // Copa do Brasil
   11,  // Campeonato Paulista
   39,  // Premier League (Inglaterra)
-  40,  // Championship (Inglateral)
+  40,  // Championship (Inglaterra)
   140, // La Liga (Espanha)
   141, // La Liga 2 (Espanha)
   135, // Serie A (Itália)
@@ -123,4 +123,79 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, 
     if (!data.candidates || !data.candidates[0]) return null;
     
     let textResult = data.candidates[0].content.parts[0].text;
-    textResult = textResult.replace(/```json/g, '').replace(/
+    textResult = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(textResult);
+  } catch (error) {
+    return null;
+  }
+}
+
+module.exports = async function handler(req, res) {
+  const apiFootballKey = process.env.FOOTBALL_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  
+  if (!apiFootballKey) {
+    return res.status(500).json({ success: false, error: "FOOTBALL_API_KEY não configurada." });
+  }
+
+  try {
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    
+    const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, {
+      headers: { 'x-apisports-key': apiFootballKey }
+    });
+    
+    if (!response.ok) throw new Error(`Erro API-Sports`);
+    const data = await response.json();
+    const allMatches = data.response || [];
+
+    const matches = allMatches.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
+    const loteDeHoje = matches.slice(0, 5); 
+    let palpitesSalvos = 0;
+
+    for (const item of loteDeHoje) {
+      const fixtureId = item.fixture.id;
+      const homeTeam = item.teams.home.name;
+      const awayTeam = item.teams.away.name;
+      const league = item.league.name;
+      
+      const dadosOdds = await buscarTodosOsMercados(fixtureId, apiFootballKey);
+      const tipInfo = await analisarComIAEstatisticas(homeTeam, awayTeam, league, dadosOdds, geminiApiKey);
+
+      if (tipInfo && tipInfo.market && tipInfo.analysis) {
+        let oddFinal = Number(tipInfo.odd);
+        if (oddFinal > 2.00) oddFinal = 1.95;
+
+        const fallbackCasas = ["Bet365", "Betano", "Superbet"];
+        const casaEscolhida = dadosOdds ? dadosOdds.bookmaker : fallbackCasas[Math.floor(Math.random() * fallbackCasas.length)];
+
+        const predictionData = {
+          matchName: `${homeTeam} vs ${awayTeam}`,
+          league,
+          country: item.league.country || "Internacional",
+          market: tipInfo.market,
+          odd: oddFinal,
+          confidence: Number(tipInfo.confidence),
+          analysis: tipInfo.analysis,
+          bookmaker: casaEscolhida,
+          matchDate: item.fixture.date,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('predictions').doc(String(fixtureId)).set(predictionData, { merge: true });
+        palpitesSalvos++;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `CRIAR APOSTA SEGURO ATIVO (Odd Máxima 2.00): ${palpitesSalvos} jogos processados com combos inteligentes!` 
+    });
+
+  } catch (error) {
+    console.error("Erro na sincronização:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
