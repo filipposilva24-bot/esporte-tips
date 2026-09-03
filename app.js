@@ -1,4 +1,6 @@
 let todosPalpitesGlobais = [];
+let ligaSelecionadaAtual = 'Todas';
+let dataSelecionadaAtual = 'Todas';
 
 async function carregarPalpites() {
   const container = document.getElementById('app-container');
@@ -12,41 +14,97 @@ async function carregarPalpites() {
     }
 
     todosPalpitesGlobais = data.predictions;
-    renderizarPalpites(todosPalpitesGlobais);
-    criarBarraFiltros();
+    renderizarFiltros();
+    aplicarFiltros();
   } catch (err) {
     container.innerHTML = '<div class="text-center py-10 text-red-400">Erro ao carregar os dados dos palpites.</div>';
   }
 }
 
-// Cria os botões de filtro dinamicamente na tela
-function criarBarraFiltros() {
-  if (document.getElementById('filtro-container')) return;
+// Cria os painéis de filtro de Ligas e Datas dinamicamente
+function renderizarFiltros() {
+  if (document.getElementById('painel-filtros')) return;
 
   const containerPrincipal = document.getElementById('app-container');
-  const ligas = ['Todas', ...new Set(todosPalpitesGlobais.map(p => p.league).filter(Boolean))];
-
-  const filtroDiv = document.createElement('div');
-  filtroDiv.id = 'filtro-container';
-  filtroDiv.className = 'flex flex-wrap gap-2 justify-center mb-6';
   
-  filtroDiv.innerHTML = ligas.map(liga => `
-    <button onclick="filtrarPorLiga('${liga}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-emerald-600 hover:text-white transition">
-      ${liga}
-    </button>
-  `).join('');
+  const ligas = ['Todas', ...new Set(todosPalpitesGlobais.map(p => p.league).filter(Boolean))];
+  
+  // Extrai as datas únicas dos palpites salvos no Firebase (formato YYYY-MM-DD)
+  const datas = ['Todas', ...new Set(todosPalpitesGlobais.map(p => {
+    if (!p.matchDate) return null;
+    return p.matchDate.split('T')[0];
+  }).filter(Boolean))].sort().reverse(); // Da data mais recente para a mais antiga
 
-  containerPrincipal.parentNode.insertBefore(filtroDiv, containerPrincipal);
+  const filtroWrapper = document.createElement('div');
+  filtroWrapper.id = 'painel-filtros';
+  filtroWrapper.className = 'mb-6 space-y-3 bg-slate-900/80 p-4 rounded-xl border border-slate-800';
+
+  filtroWrapper.innerHTML = `
+    <div>
+      <span class="text-xs font-semibold text-slate-400 block mb-1.5">Filtrar por Liga:</span>
+      <div id="filtro-ligas" class="flex flex-wrap gap-2">
+        ${ligas.map(liga => `
+          <button onclick="mudarFiltroLiga('${liga}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition ${liga === 'Todas' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">
+            ${liga}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+    <div>
+      <span class="text-xs font-semibold text-slate-400 block mb-1.5">Filtrar por Data:</span>
+      <div id="filtro-datas" class="flex flex-wrap gap-2">
+        ${datas.map(data => {
+          let label = data === 'Todas' ? 'Todas as Datas' : new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
+          return `
+            <button onclick="mudarFiltroData('${data}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition ${data === 'Todas' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">
+              ${label}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  containerPrincipal.parentNode.insertBefore(filtroWrapper, containerPrincipal);
 }
 
-// Função global para filtrar os cards
-window.filtrarPorLiga = function(ligaSelecionada) {
-  if (ligaSelecionada === 'Todas') {
-    renderizarPalpites(todosPalpitesGlobais);
-  } else {
-    const filtrados = todosPalpitesGlobais.filter(p => p.league === ligaSelecionada);
-    renderizarPalpites(filtrados);
+window.mudarFiltroLiga = function(liga) {
+  ligaSelecionadaAtual = liga;
+  atualizarEstilosBotoes('filtro-ligas', liga);
+  aplicarFiltros();
+}
+
+window.mudarFiltroData = function(data) {
+  dataSelecionadaAtual = data;
+  atualizarEstilosBotoes('filtro-datas', data);
+  aplicarFiltros();
+}
+
+function atualizarEstilosBotoes(containerId, valorAtivo) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  Array.from(container.children).forEach(btn => {
+    const textoBtn = btn.getAttribute('onclick');
+    if (textoBtn.includes(`'${valorAtivo}'`)) {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-emerald-600 text-white';
+    } else {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-slate-800 text-slate-300 hover:bg-slate-700';
+    }
+  });
+}
+
+function aplicarFiltros() {
+  let filtrados = todosPalpitesGlobais;
+
+  if (ligaSelecionadaAtual !== 'Todas') {
+    filtrados = filtrados.filter(p => p.league === ligaSelecionadaAtual);
   }
+
+  if (dataSelecionadaAtual !== 'Todas') {
+    filtrados = filtrados.filter(p => p.matchDate && p.matchDate.startsWith(dataSelecionadaAtual));
+  }
+
+  renderizarPalpites(filtrados);
 }
 
 // Renderizador isolado dos cards
@@ -54,7 +112,7 @@ function renderizarPalpites(lista) {
   const container = document.getElementById('app-container');
   
   if (!lista.length) {
-    container.innerHTML = '<div class="text-center py-10 text-slate-400">Nenhum palpite para esta liga.</div>';
+    container.innerHTML = '<div class="text-center py-10 text-slate-400">Nenhum palpite encontrado para esta seleção.</div>';
     return;
   }
 
@@ -63,7 +121,7 @@ function renderizarPalpites(lista) {
     if (p.matchDate) {
       const d = new Date(p.matchDate);
       if (!isNaN(d.getTime())) {
-        horarioFormatado = d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+        horarioFormatado = d.toLocaleDateString('pt-BR', {day: '2-digit', month:'2-digit'}) + ' às ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
       }
     }
 
