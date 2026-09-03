@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Painel automatizado de palpites esportivos",
   "dependencies": {
-    "@google/generative-ai": "^0.1.1",
+    "@google/generative-ai": "^0.21.0",
     "firebase-admin": "^12.0.0"
   }
 }
