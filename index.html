@@ -3,123 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FutTips - Plataforma de Apostas de Elite</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { background-color: #0f172a; color: #f8fafc; padding: 20px; }
-    
-    header { display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto 20px auto; padding-bottom: 15px; border-bottom: 1px solid #1e293b; }
-    .logo { font-size: 1.5rem; font-weight: 700; color: #f59e0b; display: flex; align-items: center; gap: 8px; }
-    .status-badge { background: #059669; color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-    
-    /* Filtros */
-    .filters-bar { max-width: 800px; margin: 0 auto 24px auto; background: #1e293b; padding: 16px; border-radius: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; border: 1px solid #334155; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .filter-group { display: flex; flex-direction: column; gap: 6px; }
-    .filter-group label { font-size: 0.75rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
-    .filter-group select, .filter-group input { background: #0f172a; border: 1px solid #475569; color: white; padding: 9px 10px; border-radius: 8px; font-size: 0.85rem; outline: none; width: 100%; transition: border-color 0.2s; }
-    .filter-group select:focus, .filter-group input:focus { border-color: #38bdf8; }
-    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
-
-    /* Cards */
-    .container { max-width: 800px; margin: 0 auto; }
-    .prediction-card { background: #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 18px; border: 1px solid #334155; position: relative; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); }
-    
-    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;}
-    .league-tag { font-size: 0.8rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; font-weight: 600; }
-    .countdown { font-size: 0.75rem; color: #fbbf24; font-weight: 600; margin-left: 8px; background: rgba(251, 191, 36, 0.1); padding: 3px 8px; border-radius: 4px; }
-    
-    .status-game { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-left: auto;}
-    .status-pendente { background: #334155; color: #cbd5e1; }
-    .status-green { background: #10b981; color: white; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
-    .status-red { background: #ef4444; color: white; }
-    
-    .badge-ev { background: linear-gradient(45deg, #d97706, #f59e0b); color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px; }
-    .badge-zebra { background: #6366f1; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px;}
-
-    .match-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; color: #ffffff; }
-    
-    /* Radar / Barras de Força */
-    .strength-bar-container { background: rgba(255, 255, 255, 0.04); padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 0.8rem; }
-    .strength-row { display: flex; justify-content: space-between; margin-bottom: 4px; color: #94a3b8; font-weight: 600; }
-    .bars-wrapper { display: flex; height: 6px; background: #334155; border-radius: 4px; overflow: hidden; gap: 2px; }
-    .bar-home { background: #38bdf8; height: 100%; border-radius: 4px 0 0 4px; }
-    .bar-away { background: #f59e0b; height: 100%; border-radius: 0 4px 4px 0; }
-
-    /* Notas Táticas Alinhadas Corretamente */
-    .tactical-notes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; font-size: 0.8rem; background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 8px; color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.05); }
-    .tactical-note-item { display: flex; align-items: flex-start; gap: 6px; line-height: 1.3; }
-
-    .main-market-box { background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #38bdf8; }
-    .market-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .market-name { color: #38bdf8; font-weight: 700; font-size: 0.95rem; }
-    .market-analysis { font-size: 0.88rem; color: #cbd5e1; line-height: 1.4; }
-    
-    /* Comparador de Odds */
-    .comparador-box { display: flex; gap: 8px; margin-top: 12px; }
-    .bookie-btn { flex: 1; text-align: center; background: #0f172a; padding: 8px; border-radius: 6px; border: 1px solid #475569; color: #cbd5e1; font-size: 0.75rem; text-decoration: none; transition: 0.2s; display: flex; flex-direction: column; gap: 2px;}
-    .bookie-btn:hover { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05);}
-    .bookie-odd { font-weight: bold; color: #f59e0b; font-size: 1rem; }
-
-    .actions-row { display: flex; margin-top: 12px; }
-    .btn-audio { width: 100%; background: #334155; color: white; border: none; padding: 8px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600; transition: background 0.2s;}
-    .btn-audio:hover { background: #475569; }
-
-    .criar-aposta-section { border-top: 1px dashed rgba(255, 255, 255, 0.15); padding-top: 10px; margin-top: 10px; }
-    .criar-aposta-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 9px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 0.9rem; }
-    .criar-aposta-content { display: none; margin-top: 10px; background: rgba(37, 99, 235, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(37, 99, 235, 0.3); }
-    .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 0.8rem; color: #94a3b8; }
-    .confidence-badge { color: #10b981; font-weight: 700; }
-
-    /* Estilos do Botão e Gaveta de Especiais de Jogadores (Novo) */
-    .btn-player { background-color: #10b981 !important; }
-    .btn-player:hover { background-color: #059669 !important; }
-    .player-box { background: rgba(16, 185, 129, 0.08) !important; border: 1px solid rgba(16, 185, 129, 0.3) !important; border-left: 4px solid #10b981 !important; }
-  </style>
+  <title>Esporte Tips - Painel de Palpites</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-
-  <header>
-    <div class="logo">⚡ FUTTIPS</div>
-    <div class="status-badge">● Online</div>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="bg-slate-900 border-b border-slate-800 p-4 text-center">
+    <h1 class="text-2xl font-bold tracking-wider text-emerald-400">ESPORTE TIPS PRO</h1>
+    <p class="text-xs text-slate-400">Inteligência Esportiva & Player Props Automatizados</p>
   </header>
-
-  <div class="filters-bar">
-    <div class="filter-group">
-      <label>País</label>
-      <select id="filter-country" onchange="filtrarPalpites()"><option value="todos">🌍 Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label>Liga</label>
-      <select id="filter-league" onchange="filtrarPalpites()"><option value="todos">🏆 Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label>Mercado</label>
-      <select id="filter-market" onchange="filtrarPalpites()">
-        <option value="todos">🎯 Todos os Mercados</option>
-        <option value="resultado">🏆 Resultado / ML</option>
-        <option value="gols">⚽ Gols / Over / Under</option>
-        <option value="dupla">🛡️ Empate Anula / Dupla</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label>Faixa de Odd</label>
-      <select id="filter-odd" onchange="filtrarPalpites()">
-        <option value="todos">📊 Todas Odds</option>
-        <option value="1.50">Até @1.50</option>
-        <option value="1.80">Até @1.80</option>
-        <option value="2.00">⚡ Até @2.00</option>
-        <option value="mais">Acima de @2.00</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label>Data</label>
-      <input type="date" id="filter-date" onchange="filtrarPalpites()">
-    </div>
-  </div>
-
-  <div class="container" id="predictions-container"></div>
-
+  <main class="max-w-4xl mx-auto p-4" id="app-container">
+    <div class="text-center py-10 text-slate-500">Carregando palpites...</div>
+  </main>
   <script src="app.js"></script>
 </body>
 </html>
