@@ -77,6 +77,7 @@ async function buscarJogosDoDia(apiFootballKey) {
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
+  // ALTERADO AQUI: Usando "gemini-1.5-flash" ou "gemini-pro" para evitar o erro 404 na API v1
   const model = genAI.getGenerativeModel({ 
     model: "gemini-1.5-flash", 
     generationConfig: { responseMimeType: "application/json" } 
