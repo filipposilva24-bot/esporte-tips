@@ -15,6 +15,12 @@ window.toggleCriarAposta = function(cardId) {
   if (el) el.style.display = (el.style.display === "none" || el.style.display === "") ? "block" : "none";
 };
 
+// NOVO: Função para abrir/fechar a gaveta de Especiais de Jogadores
+window.togglePlayerBet = function(cardId) {
+  const el = document.getElementById(`player-bet-${cardId}`);
+  if (el) el.style.display = (el.style.display === "none" || el.style.display === "") ? "block" : "none";
+};
+
 window.tocarAudio = function(texto) {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
@@ -187,6 +193,7 @@ function renderizarCards(predicoes) {
           </div>
         </div>
 
+        <!-- CRIAR APOSTA CLÁSSICO -->
         <div class="criar-aposta-section">
           <button class="criar-aposta-btn" onclick="toggleCriarAposta('${cardId}')">
             ⚡ Sugestão de Criar Aposta (Até 2.00)
@@ -197,6 +204,20 @@ function renderizarCards(predicoes) {
               <span style="color: #f59e0b; font-weight: bold; font-size: 1rem;">@${pred.criarApostaOdd ? Number(pred.criarApostaOdd).toFixed(2) : '1.85'}</span>
             </div>
             <p class="market-analysis" style="font-size: 0.85rem;">${pred.criarApostaAnalysis}</p>
+          </div>
+        </div>
+
+        <!-- NOVO: CRIAR APOSTA - ESPECIAIS DE JOGADORES -->
+        <div class="criar-aposta-section">
+          <button class="criar-aposta-btn btn-player" onclick="togglePlayerBet('${cardId}')">
+            🎯 Criar Aposta: Especiais de Jogadores
+          </button>
+          <div id="player-bet-${cardId}" class="criar-aposta-content player-box">
+            <div class="market-row" style="margin-bottom: 4px;">
+              <span style="color: #10b981; font-weight: bold; font-size: 0.9rem;">${pred.playerBetMarket || 'Analisando atletas...'}</span>
+              <span style="color: #f59e0b; font-weight: bold; font-size: 1rem;">@${pred.playerBetOdd ? Number(pred.playerBetOdd).toFixed(2) : '2.10'}</span>
+            </div>
+            <p class="market-analysis" style="font-size: 0.85rem;">${pred.playerBetAnalysis || 'Análise de desempenho individual dos atletas baseada em métricas.'}</p>
           </div>
         </div>
 
