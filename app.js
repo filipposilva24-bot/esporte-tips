@@ -117,7 +117,6 @@ function renderizarCards(predicoes) {
     const oddBetano = pred.comparadorOdds?.Betano || (oddBase * 1.01).toFixed(2);
     const oddSuperbet = pred.comparadorOdds?.Superbet || (oddBase * 0.98).toFixed(2);
 
-    // Barras de Força Mandante vs Visitante
     const hStr = Number(pred.homeStrength) || 75;
     const aStr = Number(pred.awayStrength) || 70;
     const totalStr = hStr + aStr;
@@ -143,7 +142,7 @@ function renderizarCards(predicoes) {
           ${pred.isUnderdog ? '<span class="badge-zebra">🦓 ZEBRA</span>' : ''}
         </h3>
 
-        <!-- GRÁFICO DE BARRAS DE FORÇA -->
+        <!-- BARRAS DE FORÇA -->
         <div class="strength-bar-container">
           <div class="strength-row">
             <span>🏠 ${homeName} (${hPct}%)</span>
@@ -155,11 +154,11 @@ function renderizarCards(predicoes) {
           </div>
         </div>
 
-        <!-- NOTAS TÁTICAS AVANÇADAS -->
+        <!-- NOTAS TÁTICAS ALINHADAS -->
         <div class="tactical-notes">
           <div class="tactical-note-item">⚡ <b>Rivalidade:</b> ${pred.rivalryNote || 'Regular'}</div>
           <div class="tactical-note-item">⚖️ <b>Árbitro:</b> ${pred.refereeNote || 'Padrão'}</div>
-          <div class="tactical-note-item" style="grid-column: span 2;">🩺 <b>Elenco:</b> ${pred.injuryNote || 'Disponíveis'}</div>
+          <div class="tactical-note-item">🩺 <b>Elenco:</b> ${pred.injuryNote || 'Disponíveis'}</div>
         </div>
 
         <div class="main-market-box">
@@ -213,17 +212,30 @@ function renderizarCards(predicoes) {
   iniciarContadorRegressivo();
 }
 
+// Contador Regressivo e Verificação de Término (Evita "Ao Vivo" falso)
 function iniciarContadorRegressivo() {
   const elementos = document.querySelectorAll('.countdown');
+  
   function atualizarTempo() {
     const agora = new Date().getTime();
+    
     elementos.forEach(el => {
       const tempoJogoStr = el.getAttribute('data-time');
-      if (!tempoJogoStr) return;
-      const distancia = new Date(tempoJogoStr).getTime() - agora;
-      if (distancia < 0) {
+      if (!tempoJogoStr) { el.innerHTML = ''; return; }
+      
+      const tempoInicio = new Date(tempoJogoStr).getTime();
+      const distancia = tempoInicio - agora;
+      const duracaoPartidaMs = 2 * 60 * 60 * 1000; // 2 horas de duração média
+      const tempoDecorridoDesdeFim = agora - (tempoInicio + duracaoPartidaMs);
+
+      if (tempoDecorridoDesdeFim > 0) {
+        el.innerHTML = "🏁 Encerrado";
+        el.style.color = "#94a3b8";
+        el.style.background = "rgba(148, 163, 184, 0.1)";
+      } else if (distancia < 0) {
         el.innerHTML = "🔴 Ao Vivo";
         el.style.color = "#f87171";
+        el.style.background = "rgba(248, 113, 113, 0.1)";
       } else {
         const h = Math.floor((distancia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const m = Math.floor((distancia % (1000 * 60 * 60)) / (1000 * 60));
@@ -232,6 +244,7 @@ function iniciarContadorRegressivo() {
       }
     });
   }
+  
   atualizarTempo();
   contadorInterval = setInterval(atualizarTempo, 1000);
 }
