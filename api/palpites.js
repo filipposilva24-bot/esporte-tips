@@ -28,17 +28,16 @@ function gerarAnaliseRealista(matchName) {
   const homeStrength = 47 + (h % 41);
   const awayStrength = 100 - homeStrength;
 
-  // Bancos de frases altamente variados e específicos para cada jogo
   const analyses = [
-    `O ${homeName} tem demonstrado forte intensidade nas transições ofensivas jogando em casa, enquanto o ${awayName} costuma sofrer defensivamente contra linhas altas. A projeção aponta para um duelo franco, com boas oportunidades de finalização e valor evidente no mercado selecionado.`,
-    `Historicamente, os confrontos envolvendo o ${homeName} apresentam alta taxa de conversão de bolas paradas. O ${awayName}, por sua vez, deve adotar uma postura reativa, explorando os espaços deixados pelos alas adversários. Entrada com excelente expectativa de EV+.`,
-    `Analisando o momento recente, o ${homeName} foca na posse de bola prolongada, o que pode desgastar a compactação defensiva do ${awayName} ao longo da segunda etapa. O cenário tático favorece uma abordagem controlada para buscar o green.`,
-    `A necessidade de vitória faz com que o ${homeName} assuma riscos desde o apito inicial. Como o ${awayName} possui um contra-ataque rápido e letal, o jogo tende a se desenhar aberto e com grande volume de finalizações de média distância.`,
-    `O ${homeName} vem sofrendo para manter sua defesa zerada nos minutos finais, ao passo que o ${awayName} cresce ofensivamente no segundo tempo. Nossa modelagem estatística encontrou uma distorção de preço muito favorável nesta linha.`
+    `O ${homeName} tem demonstrado forte intensidade nas transições ofensivas jogando em casa, enquanto o ${awayName} costuma sofrer defensivamente contra linhas altas. A projeção aponta para um duelo franco, com boas oportunidades de finalização.`,
+    `Historicamente, os confrontos envolvendo o ${homeName} apresentam alta taxa de conversão de bolas paradas. O ${awayName}, por sua vez, deve adotar uma postura reativa, explorando os espaços deixados pelos alas adversários.`,
+    `Analisando o momento recente, o ${homeName} foca na posse de bola prolongada, o que pode desgastar a compactação defensiva do ${awayName} ao longo da segunda etapa.`,
+    `A necessidade de vitória faz com que o ${homeName} assuma riscos desde o apito inicial. Como o ${awayName} possui um contra-ataque rápido e letal, o jogo tende a se desenhar aberto.`,
+    `O ${homeName} vem sofrendo para manter sua defesa zerada nos minutos finais, ao passo que o ${awayName} cresce ofensivamente no segundo tempo. Cenário tático propício para o mercado escolhido.`
   ];
 
   const referees = [
-    `Árbitro rigoroso com cartões em faltas táticas de contra-ataque para ${homeName}`,
+    `Árbitro rigoroso com cartões em faltas táticas de contra-ataque`,
     `Juiz de critério flexível, permitindo contato físico intenso nas disputas aéreas`,
     `Arbitragem com histórico de marcar faltas cavadas na intermediária`,
     `Comando disciplinar equilibrado, com foco total na fluidez do espetáculo`,
@@ -54,11 +53,11 @@ function gerarAnaliseRealista(matchName) {
   ];
 
   const injuries = [
-    `${homeName} tem ausências importantes no setor de criação; ${awayName} vai com força máxima`,
-    `Ambas as equipes entram em campo com planteis titulares confirmados e 100% físicos`,
-    `${awayName} tem desfalques na linha defensiva e deve adotar postura cautelosa`,
+    `Ausências importantes no setor de criação de ambas as equipes`,
+    `Ambas as equipes entram em campo com plantéis titulares confirmados e 100% físicos`,
+    `Desfalques na linha defensiva exigem cautela redobrada dos setores de marcação`,
     `Treinadores optaram por mexer no esquema tático devido a desgaste físico acumulado`,
-    `${homeName} conta com o retorno do seu principal artilheiro para este duelo`
+    `Retornos importantes de artilheiros para este duelo decisivo`
   ];
 
   return {
@@ -88,24 +87,26 @@ module.exports = async function handler(req, res) {
       const data = doc.data();
       const matchName = data.matchName || 'Mandante vs Visitante';
       const gerados = gerarAnaliseRealista(matchName);
-      const timeMandante = matchName.split(' vs ')[0] || 'Mandante';
 
       predictions.push({
         id: doc.id,
         ...data,
         country: data.country || 'Internacional',
         league: data.league || 'Elite',
-        // Sobrescreve com textos e dados analíticos totalmente dinâmicos
         analysis: data.analysis && data.analysis.length > 30 ? data.analysis : gerados.analysis,
-        homeStrength: gerados.homeStrength,
-        awayStrength: gerados.awayStrength,
-        refereeNote: gerados.refereeNote,
-        rivalryNote: gerados.rivalryNote,
-        injuryNote: gerados.injuryNote,
+        homeStrength: data.homeStrength || gerados.homeStrength,
+        awayStrength: data.awayStrength || gerados.awayStrength,
+        refereeNote: data.refereeNote || gerados.refereeNote,
+        rivalryNote: data.rivalryNote || gerados.rivalryNote,
+        injuryNote: data.injuryNote || gerados.injuryNote,
         comparadorOdds: data.comparadorOdds || gerados.comparadorOdds,
-        criarApostaMarket: data.criarApostaMarket || `Criar Aposta: Chance Dupla (${timeMandante} ou Empate) + Menos de 3.5 Gols`,
+        // Mantém o que veio do banco, sem sobrescrever com valores estáticos
+        criarApostaMarket: data.criarApostaMarket || "Criar Aposta Clássico indisponível",
         criarApostaOdd: data.criarApostaOdd || 1.85,
-        criarApostaAnalysis: data.criarApostaAnalysis || "Seleção combinada estruturada para capturar valor estatístico com teto de odd controlado."
+        criarApostaAnalysis: data.criarApostaAnalysis || "Análise combinada estruturada.",
+        playerBetMarket: data.playerBetMarket || "Especiais de Jogadores indisponíveis",
+        playerBetOdd: data.playerBetOdd || 2.10,
+        playerBetAnalysis: data.playerBetAnalysis || "Mapeamento tático de atletas."
       });
     });
 
