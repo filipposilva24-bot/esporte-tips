@@ -25,15 +25,14 @@ async function buscarJogosDoDia(apiFootballKey) {
       if (data.response && data.response.length > 0) {
         const LIGAS_DE_ELITE_IDS = [71, 72, 73, 11, 39, 40, 140, 141, 135, 136, 78, 79, 61, 62, 94, 88, 2, 3, 848, 13, 128];
         const filtrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
-        if (filtrados.length > 0) return filtrados.slice(0, 5);
-        return data.response.slice(0, 5);
+        if (filtrados.length > 0) return filtrados.slice(0, 6);
+        return data.response.slice(0, 6);
       }
     }
   } catch (e) {
     console.log("API-Football indisponível. Usando contingência local...");
   }
 
-  // Contingência para testes ilimitados
   return [
     {
       fixture: { id: 8001, date: new Date().toISOString(), referee: "Wilton Pereira Sampaio" },
@@ -50,8 +49,6 @@ async function buscarJogosDoDia(apiFootballKey) {
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
-  
-  // ATUALIZADO PARA O MODELO CORRETO INDICADO PELA API:
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
@@ -60,15 +57,17 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   REGRAS ABSOLUTAS:
-  1. No campo "playerBetMarket", cite obrigatoriamente nomes reais de jogadores titulares dos plantéis de ${home} e ${away} (Ex: "Gabigol 1+ Chute ao Alvo"). Proibido termos genéricos.
-  
-  Retorne estritamente um JSON com esta estrutura exata:
+  1. No campo "playerBetMarket", cite obrigatoriamente um nome real de um jogador estrela de ${home} ou ${away} seguido de uma linha de aposta (Ex: "Gabigol 1+ Chute ao Alvo"). NUNCA deixe vazio ou genérico.
+  2. No campo "playerBetOdd", insira um valor numérico decimal válido (ex: 2.10).
+  3. No campo "playerBetAnalysis", explique o motivo da aposta no atleta.
+
+  Retorne estritamente um JSON válido com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
     "mainConfidence": 88,
     "mainAnalysis": "Análise estatística curta de 2 frases.",
-    "criarApostaMarket": "Criar Aposta Clássico: [Combinada de equipe]",
+    "criarApostaMarket": "Criar Aposta: [Combinada de equipe]",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa técnica curta.",
     "playerBetMarket": "Especiais: [Nome Real do Jogador] 1+ Chute ao Alvo",
@@ -80,7 +79,8 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   }`;
 
   const result = await model.generateContent(prompt);
-  return JSON.parse(result.response.text());
+  const texto = result.response.text();
+  return JSON.parse(texto);
 }
 
 module.exports = async function handler(req, res) {
@@ -107,18 +107,18 @@ module.exports = async function handler(req, res) {
         matchName: `${home} vs ${away}`,
         league,
         country: item.league.country || "Internacional",
-        market: ai.mainMarket,
+        market: ai.mainMarket || "Mercado Principal",
         odd: oddPrincipal,
         confidence: Number(ai.mainConfidence) || 85,
-        analysis: ai.mainAnalysis,
-        criarApostaMarket: ai.criarApostaMarket,
+        analysis: ai.mainAnalysis || "Análise em processamento.",
+        criarApostaMarket: ai.criarApostaMarket || "Criar Aposta Padrão",
         criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
-        criarApostaAnalysis: ai.criarApostaAnalysis,
-        playerBetMarket: ai.playerBetMarket,
+        criarApostaAnalysis: ai.criarApostaAnalysis || "Análise tática.",
+        playerBetMarket: ai.playerBetMarket || `Especiais: Destaque de ${home} 1+ Finalização`,
         playerBetOdd: Number(ai.playerBetOdd) || 2.10,
-        playerBetAnalysis: ai.playerBetAnalysis,
+        playerBetAnalysis: ai.playerBetAnalysis || "Bom potencial estatístico.",
         bookmaker: "Bet365",
-        matchDate: item.fixture.date,
+        matchDate: item.fixture.date || new Date().toISOString(),
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
           Betano: (oddPrincipal * 0.99).toFixed(2),
@@ -126,11 +126,9 @@ module.exports = async function handler(req, res) {
         },
         isValueBet: oddPrincipal >= 1.70,
         isUnderdog: oddPrincipal >= 2.30,
-        refereeNote: ai.refereeNote,
-        rivalryNote: ai.rivalryNote,
-        injuryNote: ai.injuryNote,
-        homeStrength: 50 + (Number(fixtureId) % 30),
-        awayStrength: 50 + ((Number(fixtureId) * 3) % 25),
+        refereeNote: ai.refereeNote || "Arbitragem padrão",
+        rivalryNote: ai.rivalryNote || "Confronto importante",
+        injuryNote: ai.injuryNote || "Elencos à disposição",
         status: "pendente",
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
