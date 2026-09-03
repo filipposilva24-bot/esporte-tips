@@ -31,6 +31,10 @@ async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
         resumoMercados.push(`- ${b.name}: [${valores}]`);
       });
     }
+
+    // CONSOLE.LOG PARA VOCÊ CONFERIR NO PAINEL DA VERCEL TODO O CATÁLOGO BRUTO
+    console.log(`[FutTips - Catálogo de Mercados (${bk ? bk.name : 'Casa'}) para o jogo ${fixtureId}]:`, resumoMercados);
+
     return { bookmaker: bk ? bk.name : "Bet365", mercadosTexto: resumoMercados.join('\n') };
   } catch (e) { return null; }
 }
@@ -50,7 +54,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
   
   Retorne estritamente um JSON válido (sem markdown ou texto extra) contendo:
   {
-    "mainMarket": "Mercado principal específico com base nas odds reais (Ex: Ambas Marcam - Sim, ou Empate Anula: ${homeTeam}, ou Mais de 2.5 Gols)",
+    "mainMarket": "Mercado principal específico com base nas odds reais",
     "mainOdd": 1.85,
     "mainConfidence": 89,
     "mainAnalysis": "Análise estatística objetiva de 2 frases focada no contexto de ${homeTeam} e ${awayTeam}.",
@@ -71,7 +75,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: { 
-          temperature: 0.7 // Temperatura equilibrada para permitir variação de mercados sem travar em loops repetitivos
+          temperature: 0.7 
         } 
       })
     });
@@ -81,7 +85,6 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
     if (jsonMatch) textResult = jsonMatch[0];
     return JSON.parse(textResult);
   } catch (error) {
-    // Fallback dinâmico para evitar repetição caso ocorra falha pontual
     const mercadosAlternativos = [
       { main: `Ambas as Equipes Marcam: Sim`, combo: `Criar Aposta: Mais de 2.5 Gols + Mais de 8.5 Cantos` },
       { main: `Empate Anula aposta: ${homeTeam}`, combo: `Criar Aposta: Vitória ou Empate (${homeTeam}) + Menos de 4.5 Gols` },
@@ -161,6 +164,6 @@ module.exports = async function handler(req, res) {
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    return res.status(200).json({ success: true, message: `Processamento diversificado concluído: ${salvos} jogos atualizados.` });
+    return res.status(200).json({ success: true, message: `Processamento com log de mercados concluído: ${salvos} jogos atualizados.` });
   } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
 };
