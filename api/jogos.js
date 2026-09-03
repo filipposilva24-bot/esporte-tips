@@ -51,9 +51,9 @@ async function buscarJogosDoDia(apiFootballKey) {
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   
-  // MODELO CORRETO E ATUALIZADO
+  // Tente usar "gemini-2.0-flash" ou "gemini-1.5-flash-001"
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-flash", 
+    model: "gemini-2.0-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
