@@ -3,11 +3,9 @@ const admin = require('firebase-admin');
 if (!admin.apps.length) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
   } catch (error) {
-    console.error("Erro ao carregar credenciais do Firebase:", error);
+    console.error("Erro Firebase:", error);
   }
 }
 
@@ -18,25 +16,13 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
   try {
-    // Busca os dados EXATAMENTE como foram gravados pela IA no arquivo de jogos
-    const snapshot = await db.collection('predictions').orderBy('createdAt', 'desc').limit(100).get();
+    const snapshot = await db.collection('predictions').orderBy('createdAt', 'desc').limit(50).get();
     const predictions = [];
-    
     snapshot.forEach(doc => {
-      const data = doc.data();
-      predictions.push({
-        id: doc.id,
-        ...data // Entrega o objeto completo sem manipular ou apagar os dados da IA
-      });
+      predictions.push({ id: doc.id, ...doc.data() });
     });
-
-    return res.status(200).json({ 
-      success: true, 
-      predictions 
-    });
-
+    return res.status(200).json({ success: true, predictions });
   } catch (error) {
-    console.error("Erro ao buscar palpites:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
