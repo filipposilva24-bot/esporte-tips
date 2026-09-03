@@ -32,7 +32,6 @@ async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
       });
     }
 
-    // CONSOLE.LOG PARA VOCÊ CONFERIR NO PAINEL DA VERCEL TODO O CATÁLOGO BRUTO
     console.log(`[FutTips - Catálogo de Mercados (${bk ? bk.name : 'Casa'}) para o jogo ${fixtureId}]:`, resumoMercados);
 
     return { bookmaker: bk ? bk.name : "Bet365", mercadosTexto: resumoMercados.join('\n') };
@@ -51,6 +50,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
   ${contextoOdds}
   
   ⚠️ REGRA OBRIGATÓRIA DE DIVERSIDADE: É PROIBIDO repetir o mesmo mercado padrão para todos os jogos. Analise as odds reais acima e escolha mercados dinâmicos diferentes para cada confronto (ex: Gols Mais/Menos, Ambas Marcam, Empate Anula, Handicaps ou Intervalo).
+  ⚠️ NOVIDADE: Agora você também deve analisar os mercados individuais de JOGADORES presentes nas odds (ex: chutes, faltas, gols) e montar uma combinada focada neles (playerBetMarket).
   
   Retorne estritamente um JSON válido (sem markdown ou texto extra) contendo:
   {
@@ -61,6 +61,9 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
     "criarApostaMarket": "Criar Aposta: [Monte uma combinada diferente focada em cantos, cartões ou gols combinados]",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa técnica curta da combinada.",
+    "playerBetMarket": "Criar Aposta Jogadores: [Ex: Jogador X mais de 0.5 chutes ao alvo + Jogador Y para cometer 1+ falta]",
+    "playerBetOdd": 2.20,
+    "playerBetAnalysis": "Justificativa focada no retrospecto e estilo de jogo dos atletas citados baseada nos dados lidos.",
     "refereeNote": "Impacto disciplinar do árbitro",
     "rivalryNote": "Contexto real de tabela",
     "injuryNote": "Situação de desfalques",
@@ -99,6 +102,9 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
       criarApostaMarket: escolhido.combo,
       criarApostaOdd: 1.92,
       criarApostaAnalysis: "Cruzamento de dados estatísticos de intensidade e histórico de confrontos.",
+      playerBetMarket: `Especiais: Atacante principal do ${homeTeam} 1+ Chute ao Alvo + Zagueiro do ${awayTeam} 1+ Falta`,
+      playerBetOdd: 2.15,
+      playerBetAnalysis: "Combinada de desempenho baseada na pressão natural do mandante e histórico de faltas do visitante.",
       refereeNote: "Critério disciplinar dentro da média da competição",
       rivalryNote: "Partida de grande importância para a classificação",
       injuryNote: "Elencos principais à disposição",
@@ -146,6 +152,9 @@ module.exports = async function handler(req, res) {
           market: tip.mainMarket, odd: oddPrincipal,
           confidence: Number(tip.mainConfidence) || 88, analysis: tip.mainAnalysis,
           criarApostaMarket: tip.criarApostaMarket, criarApostaOdd: Number(tip.criarApostaOdd) || 1.90, criarApostaAnalysis: tip.criarApostaAnalysis,
+          playerBetMarket: tip.playerBetMarket || "Análise de jogadores em processamento...",
+          playerBetOdd: Number(tip.playerBetOdd) || 2.10,
+          playerBetAnalysis: tip.playerBetAnalysis || "Aguardando dados individuais detalhados da casa de apostas.",
           bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365", matchDate: item.fixture.date,
           comparadorOdds: comparador,
           isValueBet: (tip.mainConfidence >= 88 && oddPrincipal >= 1.70),
@@ -156,7 +165,7 @@ module.exports = async function handler(req, res) {
           homeStrength: Number(tip.homeStrength) || 75,
           awayStrength: Number(tip.awayStrength) || 70,
           status: "pendente",
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
+          createdAt: admin.firestore.FieldValue.serverTimestamp() // Mantém o timestamp padrão para controle
         };
 
         await db.collection('predictions').doc(String(fixtureId)).set(predictionData, { merge: true });
@@ -164,6 +173,6 @@ module.exports = async function handler(req, res) {
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    return res.status(200).json({ success: true, message: `Processamento com log de mercados concluído: ${salvos} jogos atualizados.` });
+    return res.status(200).json({ success: true, message: `Processamento com IA e mercados de jogadores concluído: ${salvos} jogos atualizados.` });
   } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
 };
