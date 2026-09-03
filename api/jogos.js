@@ -31,7 +31,7 @@ async function buscarJogosDoDia(apiFootballKey) {
     console.log("API-Football indisponível ou limite atingido.");
   }
 
-  // Fallback Defensivo Automático: Garante que o painel nunca volte vazio
+  // Fallback Defensivo Automático
   console.log("⚠️ Ativando fallback defensivo para manter o painel alimentado.");
   const nowIso = new Date().toISOString();
   return [
@@ -87,15 +87,55 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   return JSON.parse(result.response.text());
 }
 
+async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
+  if (!accountSid || !authToken || !toNumber) return;
+
+  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
+  
+  palpitesGerados.forEach(p => {
+    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
+      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
+      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
+      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
+  });
+
+  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
+
+  try {
+    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    
+    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        From: `whatsapp:${fromNumber}`,
+        To: `whatsapp:${toNumber}`,
+        Body: mensagem
+      })
+    });
+  } catch (err) {
+    console.error("Erro ao enviar mensagem para o WhatsApp:", err);
+  }
+}
+
 module.exports = async function handler(req, res) {
   const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
+  
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
 
   try {
     const matches = await buscarJogosDoDia(apiFootballKey);
     let salvos = 0;
+    let listaParaWhatsapp = [];
 
     for (const item of matches) {
       const fixtureId = item.fixture.id;
@@ -158,11 +198,16 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
+      listaParaWhatsapp.push(docData);
       salvos++;
       await new Promise(r => setTimeout(r, 1200));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos processados.` });
+    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
+      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
+    }
+
+    return res.status(200).json({ success: true, message: `Painel atualizado e mensagem enviada no WhatsApp! ${salvos} jogos processados.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
