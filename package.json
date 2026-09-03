@@ -1,7 +1,7 @@
 {
   "name": "esporte-tips",
   "version": "1.0.0",
-  "description": "App de palpites esportivos",
+  "description": "Painel automatizado de palpites esportivos",
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
     "firebase-admin": "^12.0.0"
