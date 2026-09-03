@@ -12,11 +12,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Função para buscar jogos usando múltiplas fontes (API-Football principal + Backup gratuito)
 async function buscarJogosDoDia(apiFootballKey) {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   
-  // 1. Tenta a API-Football principal
   try {
     const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { 
       headers: { 'x-apisports-key': apiFootballKey } 
@@ -25,37 +23,17 @@ async function buscarJogosDoDia(apiFootballKey) {
     if (res.ok) {
       const data = await res.json();
       if (data.response && data.response.length > 0) {
-        // Filtra ligas principais ou pega os primeiros jogos disponíveis
         const LIGAS_DE_ELITE_IDS = [71, 72, 73, 11, 39, 40, 140, 141, 135, 136, 78, 79, 61, 62, 94, 88, 2, 3, 848, 13, 128];
         const filtrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
         if (filtrados.length > 0) return filtrados.slice(0, 5);
-        return data.response.slice(0, 5); // Se não achar na lista de elite, pega os gerais do dia
+        return data.response.slice(0, 5);
       }
     }
   } catch (e) {
-    console.log("API-Football indisponível ou limite atingido. Acionando API de backup...");
+    console.log("API-Football indisponível. Usando contingência local...");
   }
 
-  // 2. Fonte Complementar / Backup (Garante que você nunca fique sem testar)
-  try {
-    const backupRes = await fetch('https://api.football-data.org/v4/matches', {
-      headers: { 'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY || '' }
-    });
-    if (backupRes.ok) {
-      const backupData = await backupRes.json();
-      if (backupData.matches && backupData.matches.length > 0) {
-        return backupData.matches.slice(0, 5).map(m => ({
-          fixture: { id: m.id, date: m.utcDate, referee: "Arbitragem Oficial" },
-          teams: { home: { name: m.homeTeam.name }, away: { name: m.awayTeam.name } },
-          league: { id: m.competition.id, name: m.competition.name, country: m.competition.area?.name || "Internacional" }
-        }));
-      }
-    }
-  } catch (err) {
-    console.log("Backup API indisponível. Usando fixtures de contingência local...");
-  }
-
-  // 3. Contingência final para testes ilimitados (Garante 100% de funcionamento sem travar)
+  // Contingência para testes ilimitados
   return [
     {
       fixture: { id: 8001, date: new Date().toISOString(), referee: "Wilton Pereira Sampaio" },
@@ -66,11 +44,6 @@ async function buscarJogosDoDia(apiFootballKey) {
       fixture: { id: 8002, date: new Date().toISOString(), referee: "Clément Turpin" },
       teams: { home: { name: "Real Madrid" }, away: { name: "Barcelona" } },
       league: { id: 140, name: "La Liga", country: "Spain" }
-    },
-    {
-      fixture: { id: 8003, date: new Date().toISOString(), referee: "Michael Oliver" },
-      teams: { home: { name: "Manchester City" }, away: { name: "Arsenal" } },
-      league: { id: 39, name: "Premier League", country: "England" }
     }
   ];
 }
@@ -78,16 +51,16 @@ async function buscarJogosDoDia(apiFootballKey) {
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   
-  // ALTERE DE "gemini-1.5-flash" PARA "gemini-pro":
+  // MODELO CORRETO E ATUALIZADO
   const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash", 
-  generationConfig: { responseMimeType: "application/json" } 
-});
+    model: "gemini-1.5-flash", 
+    generationConfig: { responseMimeType: "application/json" } 
+  });
 
   const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   REGRAS ABSOLUTAS:
-  1. No campo "playerBetMarket", cite obrigatoriamente nomes reais de jogadores titulares dos plantéis de ${home} e ${away} (Ex: "Gabigol 1+ Chute ao Alvo + Arrascaeta para cometer falta"). Proibido termos genéricos como "Atacante do time".
+  1. No campo "playerBetMarket", cite obrigatoriamente nomes reais de jogadores titulares dos plantéis de ${home} e ${away} (Ex: "Gabigol 1+ Chute ao Alvo"). Proibido termos genéricos.
   
   Retorne estritamente um JSON com esta estrutura exata:
   {
@@ -167,7 +140,7 @@ module.exports = async function handler(req, res) {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    return res.status(200).json({ success: true, message: `Multi-API executada com sucesso! ${salvos} jogos processados.` });
+    return res.status(200).json({ success: true, message: `Sucesso absoluto! ${salvos} jogos processados.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
