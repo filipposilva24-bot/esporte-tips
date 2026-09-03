@@ -80,9 +80,9 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   
   // ALTERE DE "gemini-1.5-flash" PARA "gemini-pro":
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-pro", 
-    generationConfig: { responseMimeType: "application/json" } 
-  });
+  model: "gemini-1.5-flash", 
+  generationConfig: { responseMimeType: "application/json" } 
+});
 
   const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
