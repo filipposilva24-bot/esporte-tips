@@ -13,10 +13,9 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const LIGAS_DE_ELITE_IDS = [71, 72, 73, 11, 39, 40, 140, 141, 135, 136, 78, 79, 61, 62, 94, 88, 2, 3, 848, 13, 128];
 
-// BUSCA OS DADOS E EXTRAI OS JOGADORES REAIS DO CATÁLOGO DA CASA
 async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
   try {
-    const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, { headers: { 'x-apisports-key': apiFootballKey } });
+    const response = await fetch(`[https://v3.football.api-sports.io/odds?fixture=$](https://v3.football.api-sports.io/odds?fixture=$){fixtureId}`, { headers: { 'x-apisports-key': apiFootballKey } });
     if (!response.ok) return null;
     const data = await response.json();
     if (!data.response || data.response.length === 0) return null;
@@ -37,10 +36,8 @@ async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
     if (bk && bk.bets) {
       bk.bets.forEach(b => {
         const nomeM = b.name.toLowerCase();
-        // Procura mercados específicos de jogadores (Ex: Gols, Chutes, Cartões de Atletas)
         if (nomeM.includes('player') || nomeM.includes('scorer') || nomeM.includes('shots') || nomeM.includes('goalscorer')) {
           b.values.forEach(v => {
-            // v.value geralmente traz o nome do jogador + a linha (ex: "Carlos Vinicius - Over 0.5")
             if (v.value && v.value.length > 3 && !v.value.toLowerCase().includes('yes') && !v.value.toLowerCase().includes('no')) {
               jogadoresExtraidos.push({
                  mercado: b.name,
@@ -68,7 +65,6 @@ async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
 async function gerarAnaliseComIA(homeTeam, awayTeam, league, refereeName, dadosOdds, geminiApiKey) {
   const nomeCasa = dadosOdds ? dadosOdds.bookmaker : "Bet365";
   
-  // Se a API das casas trouxe jogadores reais, montamos um texto direto com eles para a IA apenas formatar
   let contextoJogadoresReais = "";
   let sugestaoJogadorDireta = null;
 
@@ -93,10 +89,10 @@ async function gerarAnaliseComIA(homeTeam, awayTeam, league, refereeName, dadosO
     Partida: ${homeTeam} vs ${awayTeam} (${league}). Árbitro: ${refereeName || 'Padrão'}.
     ${contextoJogadoresReais}
     
-    ⚠️ INSTRUÇÃO CRÍTICA PARA O CAMPO 'playerBetMarket': 
+    ⚠️ INSTRUÇÃO: 
     Se houver um jogador real listado acima, use-o exatamente. Se não houver, cite um nome real de um jogador do plantel de ${homeTeam} ou ${awayTeam}. É PROIBIDO usar termos genéricos como "Atacante de [Time]".
     
-    Retorne estritamente um JSON puro (sem markdown, sem crases \`\`\`, apenas o objeto):
+    Retorne estritamente um JSON puro (sem markdown, sem crases), com exatamente esta estrutura:
     {
       "mainMarket": "Mercado principal específico",
       "mainOdd": 1.88,
@@ -106,7 +102,7 @@ async function gerarAnaliseComIA(homeTeam, awayTeam, league, refereeName, dadosO
       "criarApostaOdd": 1.95,
       "criarApostaAnalysis": "Justificativa técnica curta.",
       "playerBetMarket": "Criar Aposta Jogadores: [Nome Real do Jogador e linha extraída das odds]",
-      "playerBetOdd": ${sugestaoJogadorDireta ? sugestaoJogadorDireta.odd : 2.15},
+      "playerBetOdd": 2.15,
       "playerBetAnalysis": "Justificativa tática baseada no atleta.",
       "refereeNote": "Impacto disciplinar do árbitro",
       "rivalryNote": "Contexto histórico ou de tabela",
@@ -115,4 +111,4 @@ async function gerarAnaliseComIA(homeTeam, awayTeam, league, refereeName, dadosO
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let textResult = response.text().replace(/```json/g, '').replace(/
+    let textResult = response.text().replace(/
