@@ -77,7 +77,7 @@ async function analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: { 
-          temperature: 0.2 // Rigorosamente analítico, focado em lógica pura e dados
+          temperature: 0.2 
         } 
       })
     });
@@ -125,7 +125,7 @@ module.exports = async function handler(req, res) {
       const league = item.league.name;
       const refereeName = item.fixture.referee;
       
-      const dadosOdds = await dadosAvancadosFixture(fixtureId, apiFootballKey);
+      const dadosOdds = await buscarDadosAvancadosFixture(fixtureId, apiFootballKey);
       const tip = await analisarComIAEstatisticas(homeTeam, awayTeam, league, refereeName, dadosOdds, geminiApiKey);
 
       if (tip && tip.mainMarket) {
