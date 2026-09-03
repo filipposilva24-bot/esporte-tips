@@ -110,14 +110,6 @@ module.exports = async function handler(req, res) {
   if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key" });
 
   try {
-    // Limpa a coleção antiga para garantir que nenhum dado antigo fique preso
-    const snapshotAntigo = await db.collection('predictions').get();
-    const batchDelete = db.batch();
-    snapshotAntigo.docs.forEach((doc) => {
-      batchDelete.delete(doc.ref);
-    });
-    await batchDelete.commit();
-
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { headers: { 'x-apisports-key': apiFootballKey } });
     const data = await response.json();
@@ -163,11 +155,11 @@ module.exports = async function handler(req, res) {
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('predictions').doc(String(fixtureId)).set(predictionData);
+        await db.collection('predictions').doc(String(fixtureId)).set(predictionData, { merge: true });
         salvos++;
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    return res.status(200).json({ success: true, message: `Reset e processamento concluído: ${salvos} jogos novos salvos.` });
+    return res.status(200).json({ success: true, message: `Processamento concluído: ${salvos} jogos atualizados com merge.` });
   } catch (error) { return res.status(500).json({ success: false, error: error.message }); }
 };
