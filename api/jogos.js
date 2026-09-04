@@ -12,7 +12,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// LISTA DE ELITE (FA Cup ID 45 banida permanentemente)
+// LIGAS DE ELITE (FA Cup ID 45 banida permanentemente)
 const LIGAS_DE_ELITE_IDS = [
   71, 72, 73,       // Brasil (Série A, Série B, Copa do Brasil)
   39, 40,           // Inglaterra (Premier League, Championship)
@@ -36,7 +36,7 @@ async function buscarJogosDoDia(apiFootballKey) {
       if (data.response && data.response.length > 0) {
         console.log(`Total bruto de jogos na API hoje: ${data.response.length}`);
         
-        // Filtra ligas permitidas e exclui a FA Cup (45)
+        // Filtra ligas permitidas e exclui obrigatoriamente a FA Cup (45)
         const jogosFiltrados = data.response.filter(item => 
           LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
         );
@@ -58,13 +58,6 @@ async function buscarJogosDoDia(apiFootballKey) {
           return pA - pB;
         });
 
-        // 👀 LOG DE INSPEÇÃO: Mostra no console da Vercel a ordem exata para você conferir
-        console.log("=== ORDEM DE PRIORIDADE DOS JOGOS PARA HOJE ===");
-        jogosFiltrados.forEach((j, index) => {
-          const p = prioridadeLigas[j.league.id] || 99;
-          console.log(`${index + 1}. [Peso ${p}] ${j.teams.home.name} vs ${j.teams.away.name} (${j.league.name} - ID: ${j.league.id})`);
-        });
-        
         if (jogosFiltrados.length > 0) {
           return jogosFiltrados.slice(0, 10); 
         }
@@ -77,76 +70,36 @@ async function buscarJogosDoDia(apiFootballKey) {
   return [];
 }
 
-async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
-  try {
-    const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, { 
-      headers: { 'x-apisports-key': apiFootballKey } 
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data.response || data.response.length === 0) return null;
-
-    const bookmakers = data.response[0].bookmakers || [];
-    const bk = bookmakers.find(b => b.name === "Bet365" || b.name === "Betano") || bookmakers[0];
-
-    let jogadoresExtraidos = [];
-    if (bk && bk.bets) {
-      bk.bets.forEach(b => {
-        const nomeM = b.name.toLowerCase();
-        if (nomeM.includes('player') || nomeM.includes('scorer') || nomeM.includes('shots') || nomeM.includes('target')) {
-          b.values.forEach(v => {
-            if (v.value && v.value.length > 3 && !v.value.toLowerCase().includes('yes') && !v.value.toLowerCase().includes('no')) {
-              jogadoresExtraidos.push({ mercado: b.name, jogador: v.value, odd: v.odd });
-            }
-          });
-        }
-      });
-    }
-
-    return { bookmaker: bk ? bk.name : "Bet365", jogadoresExtraidos };
-  } catch (e) { 
-    return null; 
-  }
-}
-
-async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey) {
+async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
-  let contextoJogadores = "";
-  if (dadosOdds && dadosOdds.jogadoresExtraidos && dadosOdds.jogadoresExtraidos.length > 0) {
-    const listaNomes = dadosOdds.jogadoresExtraidos.slice(0, 8).map(j => `${j.jogador} (${j.mercado} @${j.odd})`).join(', ');
-    contextoJogadores = `JOGADORES REAIS CONFIRMADOS NESTA PARTIDA: [ ${listaNomes} ].`;
-  } else {
-    contextoJogadores = `Cite nomes reais de atletas titulares que atuam em ${home} ou ${away}.`;
-  }
-
-  const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
-  ${contextoJogadores}
+  const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  REGRAS ABSOLUTAS:
-  1. É PROIBIDO usar termos genéricos (Destaque, Atleta, Artilheiro). Escolha um jogador real pelo NOME.
-  2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Empate").
-  3. No campo "playerBetOdd", use um valor numérico decimal coerente (ex: 2.15).
+  REGRAS ABSOLUTAS E INegociáveis:
+  1. É ESTRITAMENTE PROIBIDO usar termos genéricos como "Destaque", "Atleta Principal", "Jogador da Casa" ou similares. Você DEVE citar o **nome e sobrenome real de um jogador titular específico** que atua em ${home} ou ${away} (Ex: Kylian Mbappé, Harry Kane, Vinicius Jr, etc.).
+  2. No campo "playerBetMarket", crie um Especial Combinado avançado utilizando o nome real do atleta (Ex: "Especiais: [Nome Real do Jogador] 1+ Finalização no Alvo + Vitória do ${home}").
+  3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15 a 3.40).
+  4. Crie mercados principais, análises táticas profundas e mercados 100% únicos baseados no momento atual de ${home} e ${away}.
 
-  Retorne JSON PURO (sem markdown) com esta estrutura exata:
+  Retorne EXATAMENTE um JSON puro (sem markdown, sem \`\`\`json) com esta estrutura exata:
   {
-    "mainMarket": "Mercado principal",
+    "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
     "mainConfidence": 88,
-    "mainAnalysis": "Análise tática",
-    "criarApostaMarket": "Criar Aposta: Combinada equipe",
+    "mainAnalysis": "Análise tática detalhada e específica do confronto.",
+    "criarApostaMarket": "Criar Aposta: [Combinada específica da partida]",
     "criarApostaOdd": 1.95,
-    "criarApostaAnalysis": "Justificativa",
-    "playerBetMarket": "Especiais: [NOME DO JOGADOR] + Aposta combinada",
+    "criarApostaAnalysis": "Justificativa técnica da aposta combinada.",
+    "playerBetMarket": "Especiais: [Nome Real e Sobrenome do Jogador] [Aposta combinada focada no atleta]",
     "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Análise focada no jogador",
-    "refereeNote": "Análise do árbitro",
-    "rivalryNote": "Contexto",
-    "injuryNote": "Desfalques"
+    "playerBetAnalysis": "Justificativa tática detalhada do desempenho recente do atleta citando seu nome.",
+    "refereeNote": "Análise específica do impacto disciplinar do árbitro ${referee}",
+    "rivalryNote": "Contexto histórico ou de tabela real entre os clubes",
+    "injuryNote": "Panorama real de desfalques prováveis"
   }`;
 
   const result = await model.generateContent(prompt);
@@ -156,9 +109,48 @@ async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey)
   return JSON.parse(textResponse);
 }
 
+async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
+  if (!accountSid || !authToken || !toNumber) return;
+
+  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
+  
+  palpitesGerados.forEach(p => {
+    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
+      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
+      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
+      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
+  });
+
+  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
+
+  try {
+    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    
+    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        From: `whatsapp:${fromNumber}`,
+        To: `whatsapp:${toNumber}`,
+        Body: mensagem
+      })
+    });
+  } catch (err) {
+    console.error("Erro ao enviar mensagem para o WhatsApp:", err);
+  }
+}
+
 module.exports = async function handler(req, res) {
   const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
+  
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
   if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key da Football-API" });
@@ -171,24 +163,21 @@ module.exports = async function handler(req, res) {
     }
 
     let salvos = 0;
+    let listaParaWhatsapp = [];
 
     for (const item of matches) {
-      if (salvos >= 10) break;
-
       const fixtureId = item.fixture.id;
       const home = item.teams.home.name;
       const away = item.teams.away.name;
       const league = item.league.name;
       const referee = item.fixture.referee || "Árbitro Oficial";
 
-      const dadosOdds = await buscarDadosAvancadosFixture(fixtureId, apiFootballKey);
-
       let ai;
       try {
-        ai = await gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiApiKey);
+        ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
       } catch (errAI) {
-        console.error(`Erro na IA para ${home} vs ${away}:`, errAI.message);
-        continue; 
+        console.error(`❌ Erro na IA para ${home} vs ${away}:`, errAI.message);
+        continue; // Pula o jogo limparemente se houver falha na IA
       }
 
       const oddPrincipal = Number(ai.mainOdd) || 1.85;
@@ -207,7 +196,7 @@ module.exports = async function handler(req, res) {
         playerBetMarket: ai.playerBetMarket,
         playerBetOdd: Number(ai.playerBetOdd) || 2.10,
         playerBetAnalysis: ai.playerBetAnalysis,
-        bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365",
+        bookmaker: "Bet365",
         matchDate: item.fixture.date,
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
@@ -224,13 +213,19 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
+      listaParaWhatsapp.push(docData);
       salvos++;
       
+      // Pequena pausa para respeitar limites de taxa do Gemini
       await new Promise(r => setTimeout(r, 2000));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos ordenados por prioridade!` });
-  } catch (err) {
+    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
+      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
+    }
+
+    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos da elite gerados 100% por IA!` });
+  } cat (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
