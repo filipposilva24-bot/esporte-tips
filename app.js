@@ -133,13 +133,6 @@ function renderizarPalpites(lista) {
     const criarApostaOddVal = p.criarApostaOdd || 1.95;
     const criarApostaDesc = p.criarApostaAnalysis || "Opção de combinada segura.";
 
-    const playerMarketText = (p.playerBetMarket && p.playerBetMarket !== 'undefined') 
-      ? p.playerBetMarket 
-      : `Especiais: Atleta Principal 1+ Finalização no Alvo`;
-    
-    const playerOddVal = (p.playerBetOdd && !isNaN(p.playerBetOdd)) ? p.playerBetOdd : 2.10;
-    const playerDesc = p.playerBetAnalysis || "Boa média de finalizações recentes.";
-
     return `
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-5 shadow-lg">
         <div class="flex justify-between items-center mb-3 text-xs text-slate-400">
@@ -165,15 +158,6 @@ function renderizarPalpites(lista) {
               <p class="text-xs text-slate-400 mt-1">${criarApostaDesc}</p>
             </div>
             <span class="text-lg font-bold text-amber-400">@${criarApostaOddVal}</span>
-          </div>
-
-          <div class="bg-emerald-950/40 p-3 rounded-lg border border-emerald-800/50 flex justify-between items-center">
-            <div>
-              <span class="text-xs text-emerald-400 font-bold block">ESPECIAIS DE JOGADORES (PLAYER PROPS)</span>
-              <span class="text-sm font-medium text-emerald-200">${playerMarketText}</span>
-              <p class="text-xs text-slate-400 mt-1">${playerDesc}</p>
-            </div>
-            <span class="text-lg font-bold text-emerald-400">@${playerOddVal}</span>
           </div>
         </div>
 
