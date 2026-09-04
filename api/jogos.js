@@ -11,6 +11,27 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+async function buscarJogosDoDia(footballDataKey) {
+  const agora = new Date();
+  const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
+  const partes = new Intl.DateTimeFormat('en-CA', options).formatToParts(agora);
+  const ano = partes.find(p => p.type === 'year').value;
+  const mes = partes.find(p => p.type === 'month').value;
+  const dia = partes.find(p => p.type === 'day').value;
+  const hoje = `${ano}-${mes}-${dia}`;
+  
+  const res = await fetch(`https://api.football-data.org/v4/matches?date=${hoje}`, { 
+    headers: { 'X-Auth-Token': footballDataKey } 
+  });
+  
+  if (!res.ok) throw new Error(`Erro HTTP da football-data.org: ${res.status}`);
+  
+  const data = await res.json();
+  if (!data.matches || data.matches.length === 0) return [];
+
+  return data.matches.slice(0, 1);
+}
+
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
@@ -28,7 +49,6 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  // Utilizando o endpoint genérico sem modelo rígido na URL para passar por cima da restrição da chave
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -39,7 +59,6 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   });
 
   if (!response.ok) {
-    // Se ainda falhar, tenta fallback automático para gemini-pro se o flash não responder
     const responsePro = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
