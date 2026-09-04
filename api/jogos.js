@@ -13,7 +13,6 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 async function buscarJogosDoDia(footballDataKey) {
-  // Data exata de hoje no Brasil formatada no padrão YYYY-MM-DD
   const agora = new Date();
   const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
   const partes = new Intl.DateTimeFormat('en-CA', options).formatToParts(agora);
@@ -38,14 +37,16 @@ async function buscarJogosDoDia(footballDataKey) {
     return [];
   }
 
-  // Pega até 5 partidas do dia para garantir velocidade e assertividade
+  // Pega até 5 partidas do dia
   return data.matches.slice(0, 5);
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
+  
+  // USANDO O MODELO 3.6-FLASH QUE A SUA CHAVE EXIGE
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-pro", 
+    model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
@@ -84,7 +85,6 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
 }
 
 module.exports = async function handler(req, res) {
-  // Utiliza a chave enviada ou busca nas variáveis de ambiente da Vercel
   const footballDataKey = process.env.FOOTBALL_DATA_KEY || 'f8928c309caf420b9cfab4a8a906de73';
   const geminiApiKey = process.env.GEMINI_API_KEY;
   
@@ -153,7 +153,7 @@ module.exports = async function handler(req, res) {
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos de hoje gravados no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
