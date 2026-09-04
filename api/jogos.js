@@ -12,15 +12,14 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// LIGAS DE ELITE (FA Cup ID 45 banida permanentemente)
 const LIGAS_DE_ELITE_IDS = [
-  71, 72, 73,       // Brasil (Série A, Série B, Copa do Brasil)
-  39, 40,           // Inglaterra (Premier League, Championship)
-  140, 141, 143,    // Espanha (La Liga, La Liga 2, Copa del Rey)
-  135, 136, 137,    // Itália (Serie A, Serie B, Coppa Italia)
-  78, 79, 81,       // Alemanha (Bundesliga, 2. Bundesliga, DFB Pokal)
-  61, 62,           // França (Ligue 1, Ligue 2)
-  2, 3, 848, 13, 11 // Internacionais (Champions, Europa, Conference, Libertadores, Sul-Americana)
+  71, 72, 73,       // Brasil
+  39, 40,           // Inglaterra
+  140, 141, 143,    // Espanha
+  135, 136, 137,    // Itália
+  78, 79, 81,       // Alemanha
+  61, 62,           // França
+  2, 3, 848, 13, 11 // Internacionais
 ];
 
 async function buscarJogosDoDia(apiFootballKey) {
@@ -36,31 +35,30 @@ async function buscarJogosDoDia(apiFootballKey) {
       if (data.response && data.response.length > 0) {
         console.log(`Total bruto de jogos na API hoje: ${data.response.length}`);
         
-        // Filtra ligas permitidas e exclui obrigatoriamente a FA Cup (45)
-        const jogosFiltrados = data.response.filter(item => 
+        // Tenta filtrar pelas ligas de elite (removendo FA Cup ID 45)
+        let jogosFiltrados = data.response.filter(item => 
           LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
         );
+
+        // 🛡️ REDE DE SEGURANÇA: Se a elite estiver vazia hoje, pega qualquer jogo profissional disponível para não deixar o painel zerado!
+        if (jogosFiltrados.length === 0) {
+          console.log("Nenhum jogo da elite estrita hoje. Utilizando jogos disponíveis na API para garantir entradas.");
+          jogosFiltrados = data.response.filter(item => item.league.id !== 45);
+        }
         
-        // 📊 TABELA DE PESOS RIGOROSA:
-        // Peso 1: 1ª Divisão e Principais Continentais
-        // Peso 2: Copas Nacionais e Outras Continentais
-        // Peso 3: Segundas Divisões (Séries B)
         const prioridadeLigas = {
-          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1, // Peso 1
-          73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,       // Peso 2
-          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3              // Peso 3
+          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
+          73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
+          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
         };
 
-        // Ordena aplicando estritamente a prioridade
         jogosFiltrados.sort((a, b) => {
           const pA = prioridadeLigas[a.league.id] || 99;
           const pB = prioridadeLigas[b.league.id] || 99;
           return pA - pB;
         });
 
-        if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 10); 
-        }
+        return jogosFiltrados.slice(0, 10); 
       }
     }
   } catch (e) {
@@ -79,27 +77,26 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
 
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  REGRAS ABSOLUTAS E INegociáveis:
-  1. É ESTRITAMENTE PROIBIDO usar termos genéricos como "Destaque", "Atleta Principal", "Jogador da Casa" ou similares. Você DEVE citar o **nome e sobrenome real de um jogador titular específico** que atua em ${home} ou ${away} (Ex: Kylian Mbappé, Harry Kane, Vinicius Jr, etc.).
-  2. No campo "playerBetMarket", crie um Especial Combinado avançado utilizando o nome real do atleta (Ex: "Especiais: [Nome Real do Jogador] 1+ Finalização no Alvo + Vitória do ${home}").
-  3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15 a 3.40).
-  4. Crie mercados principais, análises táticas profundas e mercados 100% únicos baseados no momento atual de ${home} e ${away}.
+  REGRAS ABSOLUTAS:
+  1. É OBRIGATÓRIO citar o nome e sobrenome real de um jogador titular específico que atua em ${home} ou ${away}. Proibido usar "Destaque" ou termos genéricos.
+  2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Vitória").
+  3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15).
 
-  Retorne EXATAMENTE um JSON puro (sem markdown, sem \`\`\`json) com esta estrutura exata:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
     "mainConfidence": 88,
-    "mainAnalysis": "Análise tática detalhada e específica do confronto.",
-    "criarApostaMarket": "Criar Aposta: [Combinada específica da partida]",
+    "mainAnalysis": "Análise tática detalhada do confronto.",
+    "criarApostaMarket": "Criar Aposta: Combinada específica",
     "criarApostaOdd": 1.95,
-    "criarApostaAnalysis": "Justificativa técnica da aposta combinada.",
-    "playerBetMarket": "Especiais: [Nome Real e Sobrenome do Jogador] [Aposta combinada focada no atleta]",
+    "criarApostaAnalysis": "Justificativa técnica.",
+    "playerBetMarket": "Especiais: [Nome Real do Jogador] + Aposta",
     "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Justificativa tática detalhada do desempenho recente do atleta citando seu nome.",
-    "refereeNote": "Análise específica do impacto disciplinar do árbitro ${referee}",
-    "rivalryNote": "Contexto histórico ou de tabela real entre os clubes",
-    "injuryNote": "Panorama real de desfalques prováveis"
+    "playerBetAnalysis": "Justificativa tática focada no atleta.",
+    "refereeNote": "Análise do árbitro ${referee}",
+    "rivalryNote": "Contexto histórico ou tabela",
+    "injuryNote": "Panorama de desfalques"
   }`;
 
   const result = await model.generateContent(prompt);
@@ -109,48 +106,9 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   return JSON.parse(textResponse);
 }
 
-async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
-  if (!accountSid || !authToken || !toNumber) return;
-
-  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
-  
-  palpitesGerados.forEach(p => {
-    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
-      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
-      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
-      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
-  });
-
-  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
-
-  try {
-    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-    
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        From: `whatsapp:${fromNumber}`,
-        To: `whatsapp:${toNumber}`,
-        Body: mensagem
-      })
-    });
-  } catch (err) {
-    console.error("Erro ao enviar mensagem para o WhatsApp:", err);
-  }
-}
-
 module.exports = async function handler(req, res) {
   const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
-  
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
-  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
   if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key da Football-API" });
@@ -159,11 +117,10 @@ module.exports = async function handler(req, res) {
     const matches = await buscarJogosDoDia(apiFootballKey);
     
     if (!matches || matches.length === 0) {
-       return res.status(200).json({ success: true, message: "Nenhum jogo de elite encontrado para hoje." });
+       return res.status(200).json({ success: true, message: "Nenhum jogo disponível na API hoje." });
     }
 
     let salvos = 0;
-    let listaParaWhatsapp = [];
 
     for (const item of matches) {
       const fixtureId = item.fixture.id;
@@ -176,8 +133,8 @@ module.exports = async function handler(req, res) {
       try {
         ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
       } catch (errAI) {
-        console.error(`❌ Erro na IA para ${home} vs ${away}:`, errAI.message);
-        continue; // Pula o jogo limparemente se houver falha na IA
+        console.error(`Erro na IA para ${home} vs ${away}:`, errAI.message);
+        continue; 
       }
 
       const oddPrincipal = Number(ai.mainOdd) || 1.85;
@@ -213,18 +170,12 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
-      listaParaWhatsapp.push(docData);
       salvos++;
       
-      // Pequena pausa para respeitar limites de taxa do Gemini
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
     }
 
-    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
-      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
-    }
-
-    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos da elite gerados 100% por IA!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos gerados por IA!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
