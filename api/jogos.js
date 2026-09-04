@@ -1,5 +1,4 @@
 const admin = require('firebase-admin');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 if (!admin.apps.length) {
   try {
@@ -34,12 +33,6 @@ async function buscarJogosDoDia(footballDataKey) {
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
-  const genAI = new GoogleGenerativeAI(geminiKey);
-  const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-pro", 
-    generationConfig: { responseMimeType: "application/json" } 
-  });
-
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
@@ -56,19 +49,41 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  const result => await model.generateContent(prompt);
-  let textResponse = result.response.text();
-  textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+  // Identifica se é o novo token do Google Cloud (AQ...) ou chave tradicional (AIza...)
+  const isBearerToken = geminiKey.startsWith('AQ');
+  
+  const url = isBearerToken
+    ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
+    : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
-  try {
-    return JSON.parse(textResponse);
-  } catch (e) {
-    const match = textResponse.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-    throw e;
+  const headers = { 'Content-Type': 'application/json' };
+  if (isBearerToken) {
+    headers['Authorization'] = `Bearer ${geminiKey}`;
   }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Erro na API do Gemini (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const textResponse = data.candidates[0].content.parts[0].text;
+  
+  let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+  const match = cleanText.match(/\{[\s\S]*\}/);
+  if (match) {
+    return JSON.parse(match[0]);
+  }
+  return JSON.parse(cleanText);
 }
 
 module.exports = async function handler(req, res) {
