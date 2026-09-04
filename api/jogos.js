@@ -21,39 +21,28 @@ async function buscarJogosDoDia(footballDataKey) {
   const dia = partes.find(p => p.type === 'day').value;
   const hoje = `${ano}-${mes}-${dia}`;
   
-  console.log("Buscando jogos na football-data.org para a data:", hoje);
-
   const res = await fetch(`https://api.football-data.org/v4/matches?date=${hoje}`, { 
     headers: { 'X-Auth-Token': footballDataKey } 
   });
   
-  if (!res.ok) {
-    throw new Error(`Erro HTTP da football-data.org: ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`Erro HTTP da football-data.org: ${res.status}`);
   
   const data = await res.json();
-  
-  if (!data.matches || data.matches.length === 0) {
-    return [];
-  }
+  if (!data.matches || data.matches.length === 0) return [];
 
-  // Pega até 5 partidas do dia
-  return data.matches.slice(0, 5);
+  return data.matches.slice(0, 1); // Pega 1 jogo para testar rápido e sem travar cota
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   
-  // USANDO O MODELO 3.6-FLASH QUE A SUA CHAVE EXIGE
+  // USANDO O MODELO 1.5-FLASH UNIVERSAL QUE ACEITA ESSA CHAVE
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.6-flash", 
+    model: "gemini-1.5-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
-  
-  REGRAS ABSOLUTAS:
-  1. Foque com extrema qualidade na Entrada Principal e no Criar Aposta baseados em estatísticas reais do confronto.
   
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
   {
@@ -73,15 +62,9 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   let textResponse = result.response.text();
   textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-  try {
-    return JSON.parse(textResponse);
-  } catch (e) {
-    const match = textResponse.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-    throw e;
-  }
+  const match = textResponse.match(/\{[\s\S]*\}/);
+  if (match) return JSON.parse(match[0]);
+  return JSON.parse(textResponse);
 }
 
 module.exports = async function handler(req, res) {
@@ -95,65 +78,49 @@ module.exports = async function handler(req, res) {
     const matches = await buscarJogosDoDia(footballDataKey);
     
     if (!matches || matches.length === 0) {
-       return res.status(200).json({ 
-         success: false, 
-         message: "A football-data.org retornou zero jogos para a data de hoje." 
-       });
+       return res.status(200).json({ success: false, message: "Zero jogos encontrados hoje." });
     }
 
-    let salvos = 0;
+    const item = matches[0];
+    const matchId = item.id;
+    const home = item.homeTeam.name;
+    const away = item.awayTeam.name;
+    const league = item.competition.name;
+    const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
 
-    for (const item of matches) {
-      const matchId = item.id;
-      const home = item.homeTeam.name;
-      const away = item.awayTeam.name;
-      const league = item.competition.name;
-      const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
+    const ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
+    const oddPrincipal = Number(ai.mainOdd) || 1.85;
 
-      let ai;
-      try {
-        ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
-      } catch (errAI) {
-        console.error(`❌ Erro na IA para ${home} vs ${away}:`, errAI.message);
-        continue; 
-      }
+    const docData = {
+      matchName: `${home} vs ${away}`,
+      league,
+      country: item.competition.area?.name || "Internacional",
+      market: ai.mainMarket,
+      odd: oddPrincipal,
+      confidence: Number(ai.mainConfidence) || 85,
+      analysis: ai.mainAnalysis,
+      criarApostaMarket: ai.criarApostaMarket,
+      criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
+      criarApostaAnalysis: ai.criarApostaAnalysis,
+      bookmaker: "Bet365",
+      matchDate: item.utcDate,
+      comparadorOdds: {
+        Bet365: (oddPrincipal * 1.01).toFixed(2),
+        Betano: (oddPrincipal * 0.99).toFixed(2),
+        Superbet: (oddPrincipal * 1.02).toFixed(2)
+      },
+      isValueBet: oddPrincipal >= 1.70,
+      isUnderdog: oddPrincipal >= 2.30,
+      refereeNote: ai.refereeNote,
+      rivalryNote: ai.rivalryNote,
+      injuryNote: ai.injuryNote,
+      status: "pendente",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
 
-      const oddPrincipal = Number(ai.mainOdd) || 1.85;
+    await db.collection('predictions').doc(String(matchId)).set(docData);
 
-      const docData = {
-        matchName: `${home} vs ${away}`,
-        league,
-        country: item.competition.area?.name || "Internacional",
-        market: ai.mainMarket,
-        odd: oddPrincipal,
-        confidence: Number(ai.mainConfidence) || 85,
-        analysis: ai.mainAnalysis,
-        criarApostaMarket: ai.criarApostaMarket,
-        criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
-        criarApostaAnalysis: ai.criarApostaAnalysis,
-        bookmaker: "Bet365",
-        matchDate: item.utcDate,
-        comparadorOdds: {
-          Bet365: (oddPrincipal * 1.01).toFixed(2),
-          Betano: (oddPrincipal * 0.99).toFixed(2),
-          Superbet: (oddPrincipal * 1.02).toFixed(2)
-        },
-        isValueBet: oddPrincipal >= 1.70,
-        isUnderdog: oddPrincipal >= 2.30,
-        refereeNote: ai.refereeNote,
-        rivalryNote: ai.rivalryNote,
-        injuryNote: ai.injuryNote,
-        status: "pendente",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      await db.collection('predictions').doc(String(matchId)).set(docData);
-      salvos++;
-      
-      await new Promise(r => setTimeout(r, 1500));
-    }
-
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos de hoje gravados no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Jogo gerado e salvo no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
