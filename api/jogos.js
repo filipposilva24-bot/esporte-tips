@@ -11,7 +11,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// 1. Busca os jogos do dia na Football-Data
+// 1. Busca os jogos do dia e dados da competição na Football-Data
 async function buscarJogosDoDia(footballDataKey) {
   const agora = new Date();
   const hoje = agora.toISOString().split('T')[0];
@@ -28,55 +28,75 @@ async function buscarJogosDoDia(footballDataKey) {
   return data.matches.filter(match => ligasElite.includes(match.competition?.code)).slice(0, 10);
 }
 
-// 2. Busca estatísticas reais no SofaScore (via RapidAPI)
-async function buscarEstatisticasSofaScore(home, away, rapidApiKey, rapidApiHost) {
+// 2. Busca a Tabela de Classificação (Standings) para extrair dados reais de desempenho
+async function buscarDadosTabela(competitionCode, footballDataKey) {
   try {
-    // Busca o ID do evento ou estatísticas básicas usando a busca de partidas do SofaScore
-    const query = encodeURIComponent(`${home} ${away}`);
-    const res = await fetch(`https://${rapidApiHost}/search/unique-tournaments?q=${query}`, {
-      headers: {
-        'x-rapidapi-key': rapidApiKey,
-        'x-rapidapi-host': rapidApiHost
-      }
+    const res = await fetch(`https://api.football-data.org/v4/competitions/${competitionCode}/standings`, {
+      headers: { 'X-Auth-Token': footballDataKey }
     });
-    
-    if (!res.ok) return "Estatísticas em tempo real indisponíveis via SofaScore.";
-    
-    // Como o SofaScore retorna dados estruturados complexos, passamos um indicativo de que há suporte a dados
-    return `Dados estatísticos recentes obtidos via SofaScore para o confronto ${home} vs ${away}.`;
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Retorna a tabela principal (geralmente total)
+    const tabelaGeral = data.standings?.find(s => s.type === 'TOTAL')?.table || [];
+    return tabelaGeral;
   } catch (e) {
-    return "Falha ao conectar com SofaScore. Analise com base no histórico geral.";
+    return null;
   }
 }
 
-// 3. IA Tipster analisando com base nos dados estatísticos
-async function gerarPalpiteIA(home, away, league, referee, dadosEstatisticos, groqKey) {
+// 3. Busca Odds Reais (The Odds API) para ancorar o favoritismo matemático
+async function buscarOddsReais(oddsApiKey) {
+  if (!oddsApiKey) return [];
+  try {
+    const esportes = [
+      'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 
+      'soccer_germany_bundesliga', 'soccer_france_ligue_one', 'soccer_uefa_champs_league', 'soccer_brazil_campeonato'
+    ];
+    const oddsPromises = esportes.map(sport => 
+      fetch(`https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${oddsApiKey}&regions=uk,eu&markets=h2h`)
+      .then(res => res.ok ? res.json() : [])
+      .catch(() => [])
+    );
+    const resultados = await Promise.all(oddsPromises);
+    return resultados.flat();
+  } catch(e) {
+    return [];
+  }
+}
+
+function normalizarNome(nome) {
+  return nome.toLowerCase().replace(/( fc| cf| ac| as | 1907| ud| \bde\b| \bdo\b| \bda\b)/g, '').trim();
+}
+
+// 4. IA Tipster Quantitativa processando o Dossiê Completo
+async function gerarPalpiteIAComDossie(home, away, league, referee, dadosContexto, groqKey) {
   const modelName = "openai/gpt-oss-20b";
 
-  const prompt = `Você é um Tipster Profissional de Elite especialista em análise quantitativa de futebol. 
-  Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
+  const prompt = `Você é um Analista Quantitativo e Tipster Profissional de Elite. 
+  Confronto: ${home} (Mandante) vs ${away} (Visitante) na competição ${league}. Árbitro: ${referee}.
   
-  DADOS ESTATÍSTICOS REAIS DO SOFASCORE / CONTEXTO:
-  ${dadosEstatisticos}
+  DOSSIÊ DE DADOS REAIS DO JOGO:
+  ${dadosContexto}
   
-  REGRAS CRÍTICAS DE ANÁLISE:
+  DIRETRIZES DE ANÁLISE PROFISSIONAL:
   1. IDIOMA OBRIGATÓRIO: Escreva TUDO 100% em Português do Brasil.
-  2. VARIEDADE DE MERCADOS: Analise profundamente e varie as apostas. Não aposte sempre na vitória do favorito. Explore "Ambas Marcam", "Menos/Mais de 2.5 Gols", "Empate Anula", ou Dupla Chance quando houver valor.
-  3. VARIEDADE NO CRIAR APOSTA: Construa combinadas táticas variadas (ex: Ambas Marcam + Mais de 2.5 Gols, ou Dupla Chance do Azarão + Menos de 3.5 Gols). É PROIBIDO usar títulos genéricos como "Combinada segura".
-  4. ODDS E CONFIANÇA: Gere odds matemáticas coerentes com o mercado escolhido e um nível de confiança realista entre 72 e 96.
+  2. ANÁLISE RIGOROSA DOS DADOS: Leia a tabela, a forma recente e as odds de mercado fornecidas no dossiê. Só escolha o mercado principal e a combinada ("Criar Aposta") se os números justificarem matematicamente. Se os dados apontam jogo under, vá de Menos gols. Se há superioridade clara na tabela, explore o handicap ou vitória.
+  3. SEM ACHISMOS: Justifique cada centavo da análise usando os dados reais do dossiê (ex: posição na tabela, saldo de gols, cotação das casas).
+  4. MATEMÁTICA E COERÊNCIA: A odd da combinada deve refletir o risco real da fusão dos mercados.
+  5. NOTAS TÉCNICAS: Avalie o perfil disciplinar do árbitro ${referee}, o contexto real da tabela e desfalques lógicos por setor.
 
-  Retorne EXATAMENTE um JSON puro sem markdown:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura:
   {
-    "mainMarket": "Mercado principal sugerido (ex: Ambas as Equipes Marcam - Sim)",
+    "mainMarket": "Mercado principal fundamentado nos dados (ex: Vitória do ${home}, Menos de 2.5 Gols, Empate Anula)",
     "mainOdd": 0.00,
     "mainConfidence": 85,
-    "mainAnalysis": "Análise técnica fundamentada nos dados estatísticos do confronto.",
-    "criarApostaMarket": "Nome EXATO da combinada (ex: Ambas Marcam + Mais de 2.5 Gols)",
+    "mainAnalysis": "Análise técnica profunda baseada estritamente nos dados do dossiê.",
+    "criarApostaMarket": "Nome exato da combinada (ex: Vitória do ${home} + Mais de 1.5 Gols)",
     "criarApostaOdd": 0.00,
-    "criarApostaAnalysis": "Justificativa tática da combinada.",
-    "refereeNote": "Análise do árbitro ${referee}",
-    "rivalryNote": "Contexto histórico e tabela",
-    "injuryNote": "Panorama de desfalques por setor"
+    "criarApostaAnalysis": "Justificativa tática e estatística da combinada.",
+    "refereeNote": "Análise comportamental do árbitro ${referee}",
+    "rivalryNote": "Contexto do confronto baseado na tabela atual",
+    "injuryNote": "Panorama tático de desfalques por setor"
   }`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -85,7 +105,7 @@ async function gerarPalpiteIA(home, away, league, referee, dadosEstatisticos, gr
     body: JSON.stringify({
       model: modelName,
       messages: [
-        { role: "system", content: "Você é um tipster estatístico que retorna exclusivamente JSON válido." },
+        { role: "system", content: "Você é um analista esportivo quantitativo que processa dados estatísticos e retorna exclusivamente JSON válido." },
         { role: "user", content: prompt }
       ],
       response_format: { type: "json_object" }
@@ -100,21 +120,24 @@ async function gerarPalpiteIA(home, away, league, referee, dadosEstatisticos, gr
 module.exports = async function handler(req, res) {
   const footballDataKey = process.env.FOOTBALL_DATA_KEY;
   const groqKey = process.env.GROQ_API_KEY;
-  const rapidApiKey = process.env.RAPID_API_KEY;     // SUA CHAVE DO RAPIDAPI
-  const rapidApiHost = process.env.RAPID_API_HOST;   // HOST DA API DO SOFASCORE NO RAPIDAPI
+  const oddsApiKey = process.env.THE_ODDS_API_KEY;
   
   if (!groqKey || !footballDataKey) {
     return res.status(500).json({ success: false, error: "Faltam chaves principais no ambiente." });
   }
 
   try {
-    const matches = await buscarJogosDoDia(footballDataKey);
+    const [matches, todasAsOdds] = await Promise.all([
+      buscarJogosDoDia(footballDataKey),
+      buscarOddsReais(oddsApiKey)
+    ]);
     
     if (!matches || matches.length === 0) {
        return res.status(200).json({ success: false, message: "Nenhum jogo de elite hoje." });
     }
 
     let processados = 0;
+    const cacheTabelas = {};
 
     const promessas = matches.map(async (item) => {
       try {
@@ -122,15 +145,63 @@ module.exports = async function handler(req, res) {
         const home = item.homeTeam.name;
         const away = item.awayTeam.name;
         const league = item.competition.name;
+        const compCode = item.competition.code;
         const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Padrão";
 
-        // Puxa dados do SofaScore se as chaves estiverem configuradas
-        const dadosEstatisticos = (rapidApiKey && rapidApiHost) 
-          ? await buscarEstatisticasSofaScore(home, away, rapidApiKey, rapidApiHost)
-          : "Análise baseada em dados consolidados de desempenho.";
+        // Busca e cacheia a tabela da liga para economizar requisições
+        if (!cacheTabelas[compCode]) {
+          cacheTabelas[compCode] = await buscarDadosTabela(compCode, footballDataKey);
+        }
+        const tabela = cacheTabelas[compCode] || [];
 
-        const ai = await gerarPalpiteIA(home, away, league, referee, dadosEstatisticos, groqKey);
-        const oddPrincipal = Number(ai.mainOdd) || 1.85;
+        // Extrai dados reais do Mandante e Visitante na tabela oficial
+        const dadosHome = tabela.find(t => t.team.name.toLowerCase().includes(home.toLowerCase()) || home.toLowerCase().includes(t.team.name.toLowerCase()));
+        const dadosAway = tabela.find(t => t.team.name.toLowerCase().includes(away.toLowerCase()) || away.toLowerCase().includes(t.team.name.toLowerCase()));
+
+        let resumoTabela = "Dados da tabela oficial indisponíveis no momento.";
+        if (dadosHome && dadosAway) {
+          resumoTabela = `
+          - ${home} (Mandante): ${dadosHome.position}º lugar | ${dadosHome.playedGames} jogos | ${dadosHome.won}V, ${dadosHome.draw}E, ${dadosHome.lost}D | Saldo de Gols: ${dadosHome.goalDifference} | Pontos: ${dadosHome.points}
+          - ${away} (Visitante): ${dadosAway.position}º lugar | ${dadosAway.playedGames} jogos | ${dadosAway.won}V, ${dadosAway.draw}E, ${dadosAway.lost}D | Saldo de Gols: ${dadosAway.goalDifference} | Pontos: ${dadosAway.points}
+          `;
+        }
+
+        // Cruza com as Odds Reais da The Odds API
+        const homeNorm = normalizarNome(home);
+        const awayNorm = normalizarNome(away);
+        let resumoOdds = "Mercado de odds sem cotação ao vivo cadastrada.";
+        let cota1 = 0, cota2 = 0;
+
+        const jogoComOdds = todasAsOdds.find(o => 
+          normalizarNome(o.home_team).includes(homeNorm) || normalizarNome(o.away_team).includes(awayNorm)
+        );
+
+        if (jogoComOdds && jogoComOdds.bookmakers?.length > 0) {
+          const bookmaker = jogoComOdds.bookmakers.find(b => b.key === 'bet365') || jogoComOdds.bookmakers[0];
+          const market = bookmaker.markets.find(m => m.key === 'h2h');
+          if (market) {
+            cota1 = market.outcomes.find(out => out.name === jogoComOdds.home_team)?.price || 0;
+            const cotaX = market.outcomes.find(out => out.name === 'Draw')?.price || 0;
+            cota2 = market.outcomes.find(out => out.name === jogoComOdds.away_team)?.price || 0;
+            resumoOdds = `ODDS REAIS DE MERCADO (1X2): Vitória ${home}: @${cota1} | Empate: @${cotaX} | Vitória ${away}: @${cota2}`;
+          }
+        }
+
+        // Monta o Dossiê Final Consolidado
+        const dossiêCompleto = `
+        1. SITUAÇÃO NA TABELA DA LIGA:
+        ${resumoTabela}
+
+        2. COTAÇÃO ATUAL DAS CASAS DE APOSTAS:
+        ${resumoOdds}
+        `;
+
+        const ai = await gerarPalpiteIAComDossie(home, away, league, referee, dossiêCompleto, groqKey);
+        
+        let oddPrincipal = Number(ai.mainOdd) || 1.85;
+        // Auto-correção de odd se a IA escolheu vitória seca e temos a cota real
+        if (cota1 > 0 && ai.mainMarket.toLowerCase().includes(homeNorm)) oddPrincipal = cota1;
+        if (cota2 > 0 && ai.mainMarket.toLowerCase().includes(awayNorm)) oddPrincipal = cota2;
 
         const docData = {
           matchName: `${home} vs ${away}`,
@@ -162,7 +233,7 @@ module.exports = async function handler(req, res) {
         await db.collection('predictions').doc(String(matchId)).set(docData);
         processados++;
       } catch (e) {
-        console.error(`Erro no jogo ${item.id}:`, e.message);
+        console.error(`Erro ao processar jogo ${item.id}:`, e.message);
       }
     });
 
@@ -170,9 +241,9 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ 
       success: true, 
-      message: `Painel atualizado com SofaScore! ${processados} jogos processados.` 
+      message: `Análise Quantitativa Completa Concluída! ${processados} jogos processados com base na tabela real e odds de mercado.` 
     });
   } catch (err) {
-    return res.status(500).json({ success: false, erroCritico: err.message });
+    return res.status(500).json({ success: false, erroCritico: err.message ?? err };
   }
 };
