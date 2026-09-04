@@ -32,10 +32,10 @@ async function buscarJogosDoDia(footballDataKey) {
   return data.matches.slice(0, 1);
 }
 
-async function gerarPalpiteIA(home, away, league, referee, openAiKey) {
+async function gerarPalpiteIA(home, away, league, referee, groqKey) {
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  Retorne um JSON com esta estrutura exata:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
@@ -49,14 +49,14 @@ async function gerarPalpiteIA(home, away, league, referee, openAiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openAiKey}`
+      'Authorization': `Bearer ${groqKey}`
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: "Você é um analista esportivo profissional que retorna estritamente JSON válido." },
         { role: "user", content: prompt }
@@ -67,7 +67,7 @@ async function gerarPalpiteIA(home, away, league, referee, openAiKey) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Erro na API da OpenAI (${response.status}): ${errText}`);
+    throw new Error(`Erro na API do Groq (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
@@ -76,9 +76,9 @@ async function gerarPalpiteIA(home, away, league, referee, openAiKey) {
 
 module.exports = async function handler(req, res) {
   const footballDataKey = process.env.FOOTBALL_DATA_KEY || 'f8928c309caf420b9cfab4a8a906de73';
-  const openAiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
   
-  if (!openAiKey) return res.status(500).json({ success: false, error: "Falta API Key da OpenAI (OPENAI_API_KEY)" });
+  if (!groqKey) return res.status(500).json({ success: false, error: "Falta API Key do Groq (GROQ_API_KEY)" });
   if (!footballDataKey) return res.status(500).json({ success: false, error: "Falta API Key da football-data.org" });
 
   try {
@@ -95,7 +95,7 @@ module.exports = async function handler(req, res) {
     const league = item.competition.name;
     const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
 
-    const ai = await gerarPalpiteIA(home, away, league, referee, openAiKey);
+    const ai = await gerarPalpiteIA(home, away, league, referee, groqKey);
     const oddPrincipal = Number(ai.mainOdd) || 1.85;
 
     const docData = {
@@ -127,7 +127,7 @@ module.exports = async function handler(req, res) {
 
     await db.collection('predictions').doc(String(matchId)).set(docData);
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso via OpenAI! Jogo salvo no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado via Groq com sucesso! Jogo salvo no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
