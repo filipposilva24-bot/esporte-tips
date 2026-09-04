@@ -36,11 +36,12 @@ async function buscarJogosDoDia(footballDataKey) {
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   
-  // USANDO O MODELO 1.5-FLASH UNIVERSAL QUE ACEITA ESSA CHAVE
+  // ALTERADO PARA O MODELO COMPATÍVEL COM ESTA CHAVE
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-flash", 
+    model: "gemini-1.5-pro", 
     generationConfig: { responseMimeType: "application/json" } 
   });
+  // Se ainda persistir, altere a string acima para "gemini-pro"
 
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
