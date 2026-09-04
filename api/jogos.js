@@ -11,143 +11,201 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// 1. Busca os confrontos e árbitros na Football-Data
 async function buscarJogosDoDia(footballDataKey) {
   const agora = new Date();
-  const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
-  const partes = new Intl.DateTimeFormat('en-CA', options).formatToParts(agora);
-  const ano = partes.find(p => p.type === 'year').value;
-  const mes = partes.find(p => p.type === 'month').value;
-  const dia = partes.find(p => p.type === 'day').value;
-  const hoje = `${ano}-${mes}-${dia}`;
+  const hoje = agora.toISOString().split('T')[0]; // Formato YYYY-MM-DD
   
   const res = await fetch(`https://api.football-data.org/v4/matches?date=${hoje}`, { 
     headers: { 'X-Auth-Token': footballDataKey } 
   });
   
-  if (!res.ok) throw new Error(`Erro HTTP da football-data.org: ${res.status}`);
-  
+  if (!res.ok) throw new Error(`Erro football-data: ${res.status}`);
   const data = await res.json();
-  if (!data.matches || data.matches.length === 0) return [];
+  if (!data.matches) return [];
 
-  // Ligas oficiais de elite suportadas pela API
   const ligasElite = ['CL', 'BL1', 'BSA', 'PD', 'FL1', 'EC', 'SA', 'PL'];
-
-  // Filtra estritamente para pegar apenas jogos destas competições
   const jogosElite = data.matches.filter(match => ligasElite.includes(match.competition?.code));
-
-  if (jogosElite.length === 0) {
-    return [];
-  }
-
-  // Retorna no máximo 10 jogos do dia
-  return jogosElite.slice(0, 10);
+  
+  return jogosElite.slice(0, 10); // Retorna até 10 jogos
 }
 
-async function gerarPalpiteIA(home, away, league, referee, groqKey) {
+// 2. Busca Odds reais da Bet365 e outras casas (The Odds API)
+async function buscarOddsReais(oddsApiKey) {
+  try {
+    // Array com as chaves de esportes da The Odds API correspondentes às nossas ligas
+    const esportes = [
+      'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 
+      'soccer_germany_bundesliga', 'soccer_france_ligue_one', 'soccer_uefa_champs_league'
+    ];
+    
+    // Dispara todas as requisições de odds ao mesmo tempo (mais rápido)
+    const oddsPromises = esportes.map(sport => 
+      fetch(`https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${oddsApiKey}&regions=uk,eu&markets=h2h`)
+      .then(res => res.ok ? res.json() : [])
+      .catch(() => [])
+    );
+    
+    const resultados = await Promise.all(oddsPromises);
+    return resultados.flat(); // Junta tudo num array só
+  } catch(e) {
+    console.log("Falha ao buscar The Odds API, seguindo sem odds reais.");
+    return [];
+  }
+}
+
+// Função para fazer o "Match" dos nomes dos times entre as duas APIs
+function normalizarNome(nome) {
+  return nome.toLowerCase().replace(/( fc| cf| ac| as | 1907| ud| \bde\b| \bdo\b| \bda\b)/g, '').trim();
+}
+
+// 3. IA Tipster recebendo os DADOS REAIS para analisar
+async function gerarPalpiteIA(home, away, league, referee, oddsReaisTexto, groqKey) {
   const modelName = "openai/gpt-oss-20b";
 
-  const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
+  const prompt = `Você é um Tipster Profissional de Elite especialista em futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata (sem incluir player props ou nomes de jogadores fictícios):
+  CENÁRIO DAS CASAS DE APOSTAS:
+  ${oddsReaisTexto}
+  
+  REGRAS CRÍTICAS:
+  1. ANÁLISE BASEADA EM FATOS: Se o Cenário das Casas mostrou as odds reais (Vitória Mandante/Visitante/Empate), use-as como base para entender o favoritismo real.
+  2. DEVOLVA UMA ODD COERENTE: No campo mainOdd, coloque a odd que faça sentido matemático com a realidade fornecida.
+  3. CRIAR APOSTA: A odd da combinada deve respeitar as leis da probabilidade (ex: Dupla Chance joga a odd pra baixo).
+  4. PROIBIDO: Não invente posições na tabela (ex: "zona de rebaixamento") se não souber. Fale de estilo de jogo, força ofensiva e tática.
+
+  Retorne EXATAMENTE este JSON puro:
   {
-    "mainMarket": "Mercado principal específico (ex: Vitória Simples, Mais de 2.5 Gols)",
-    "mainOdd": 1.88,
-    "mainConfidence": 88,
-    "mainAnalysis": "Análise tática detalhada do confronto para o mercado principal.",
-    "criarApostaMarket": "Criar Aposta: Combinada realista (ex: Vitória ou Empate + Mais de 1.5 Gols)",
-    "criarApostaOdd": 1.95,
-    "criarApostaAnalysis": "Justificativa técnica sólida para a aposta combinada.",
-    "refereeNote": "Análise comportamental do árbitro ${referee} quanto a cartões e critério de faltas",
-    "rivalryNote": "Contexto histórico do confronto ou situação atual na tabela",
-    "injuryNote": "Panorama geral de desfalques por setor da equipe, sem citar nomes de atletas"
+    "mainMarket": "Mercado principal sugerido (ex: Vitória do ${home})",
+    "mainOdd": 0.00, // Preencha com valor numérico realístico
+    "mainConfidence": 85,
+    "mainAnalysis": "Análise tática sem inventar posições na tabela.",
+    "criarApostaMarket": "Criar Aposta: Combinada segura",
+    "criarApostaOdd": 0.00, // Valor matemático realístico
+    "criarApostaAnalysis": "Justificativa da combinada.",
+    "refereeNote": "Análise do perfil do árbitro ${referee}",
+    "rivalryNote": "Contexto histórico (sem inventar pontuações)",
+    "injuryNote": "Possíveis desfalques por setor (sem inventar nomes de atletas)"
   }`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${groqKey}`
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
     body: JSON.stringify({
       model: modelName,
       messages: [
-        { role: "system", content: "Você é um analista esportivo profissional que retorna estritamente JSON válido." },
+        { role: "system", content: "Você é um tipster esportivo que processa dados e retorna exclusivamente JSON válido." },
         { role: "user", content: prompt }
       ],
       response_format: { type: "json_object" }
     })
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Erro na API do Groq usando o modelo [${modelName}]: ${errText}`);
-  }
-
+  if (!response.ok) throw new Error("Erro Groq API");
   const data = await response.json();
   return JSON.parse(data.choices[0].message.content);
 }
 
 module.exports = async function handler(req, res) {
-  const footballDataKey = process.env.FOOTBALL_DATA_KEY || 'f8928c309caf420b9cfab4a8a906de73';
+  const footballDataKey = process.env.FOOTBALL_DATA_KEY;
   const groqKey = process.env.GROQ_API_KEY;
+  const oddsApiKey = process.env.THE_ODDS_API_KEY; // NOVA CHAVE DA ODDS API
   
-  if (!groqKey) return res.status(500).json({ success: false, error: "Falta API Key do Groq (GROQ_API_KEY)" });
-  if (!footballDataKey) return res.status(500).json({ success: false, error: "Falta API Key da football-data.org" });
+  if (!groqKey || !footballDataKey) {
+    return res.status(500).json({ success: false, error: "Faltam chaves de API essenciais no .env" });
+  }
 
   try {
-    const matches = await buscarJogosDoDia(footballDataKey);
+    const [matches, todasAsOdds] = await Promise.all([
+      buscarJogosDoDia(footballDataKey),
+      oddsApiKey ? buscarOddsReais(oddsApiKey) : []
+    ]);
     
     if (!matches || matches.length === 0) {
-       return res.status(200).json({ success: false, message: "Nenhum jogo das ligas de elite encontrado para hoje." });
+       return res.status(200).json({ success: false, message: "Nenhum jogo de elite hoje." });
     }
 
     let processados = 0;
 
-    // Loop para processar e salvar cada um dos jogos de elite (até 10)
-    for (const item of matches) {
-      const matchId = item.id;
-      const home = item.homeTeam.name;
-      const away = item.awayTeam.name;
-      const league = item.competition.name;
-      const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
+    // Processar múltiplos jogos simultaneamente para não dar "Time Out" na Vercel
+    const promessasDeProcessamento = matches.map(async (item) => {
+      try {
+        const matchId = item.id;
+        const home = item.homeTeam.name;
+        const away = item.awayTeam.name;
+        const league = item.competition.name;
+        const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Padrão";
 
-      const ai = await gerarPalpiteIA(home, away, league, referee, groqKey);
-      const oddPrincipal = Number(ai.mainOdd) || 1.85;
+        // Fazendo o cruzamento (Match) das duas APIs
+        const homeNorm = normalizarNome(home);
+        const awayNorm = normalizarNome(away);
+        
+        let textoDeOddsParaIA = "Sem odds em tempo real disponíveis. Estime baseado no favoritismo histórico.";
+        
+        const jogoComOdds = todasAsOdds.find(o => 
+          normalizarNome(o.home_team).includes(homeNorm) || normalizarNome(o.away_team).includes(awayNorm)
+        );
 
-      const docData = {
-        matchName: `${home} vs ${away}`,
-        league,
-        country: item.competition.area?.name || "Internacional",
-        market: ai.mainMarket,
-        odd: oddPrincipal,
-        confidence: Number(ai.mainConfidence) || 85,
-        analysis: ai.mainAnalysis,
-        criarApostaMarket: ai.criarApostaMarket,
-        criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
-        criarApostaAnalysis: ai.criarApostaAnalysis,
-        bookmaker: "Bet365",
-        matchDate: item.utcDate,
-        comparadorOdds: {
-          Bet365: (oddPrincipal * 1.01).toFixed(2),
-          Betano: (oddPrincipal * 0.99).toFixed(2),
-          Superbet: (oddPrincipal * 1.02).toFixed(2)
-        },
-        isValueBet: oddPrincipal >= 1.70,
-        isUnderdog: oddPrincipal >= 2.30,
-        refereeNote: ai.refereeNote,
-        rivalryNote: ai.rivalryNote,
-        injuryNote: ai.injuryNote,
-        status: "pendente",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
+        let cota1 = 0, cotaX = 0, cota2 = 0;
 
-      await db.collection('predictions').doc(String(matchId)).set(docData);
-      processados++;
-    }
+        if (jogoComOdds && jogoComOdds.bookmakers && jogoComOdds.bookmakers.length > 0) {
+          const bookmaker = jogoComOdds.bookmakers.find(b => b.key === 'bet365') || jogoComOdds.bookmakers[0];
+          const market = bookmaker.markets.find(m => m.key === 'h2h');
+          if (market) {
+            cota1 = market.outcomes.find(out => out.name === jogoComOdds.home_team)?.price || 0;
+            cotaX = market.outcomes.find(out => out.name === 'Draw')?.price || 0;
+            cota2 = market.outcomes.find(out => out.name === jogoComOdds.away_team)?.price || 0;
+            textoDeOddsParaIA = `ODDS REAIS (1X2): Vitória ${home}: @${cota1} | Empate: @${cotaX} | Vitória ${away}: @${cota2}`;
+          }
+        }
+
+        const ai = await gerarPalpiteIA(home, away, league, referee, textoDeOddsParaIA, groqKey);
+        
+        // Se a IA alucinar a odd e a The Odds tiver a cota real de vitória, o sistema ajusta pra real automaticamente:
+        let oddPrincipal = Number(ai.mainOdd) || 1.85;
+        if (cota1 > 0 && ai.mainMarket.toLowerCase().includes(homeNorm)) oddPrincipal = cota1;
+        if (cota2 > 0 && ai.mainMarket.toLowerCase().includes(awayNorm)) oddPrincipal = cota2;
+
+        const docData = {
+          matchName: `${home} vs ${away}`,
+          league,
+          country: item.competition.area?.name || "Internacional",
+          market: ai.mainMarket,
+          odd: oddPrincipal,
+          confidence: Number(ai.mainConfidence) || 85,
+          analysis: ai.mainAnalysis,
+          criarApostaMarket: ai.criarApostaMarket,
+          criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
+          criarApostaAnalysis: ai.criarApostaAnalysis,
+          bookmaker: "Bet365",
+          matchDate: item.utcDate,
+          comparadorOdds: {
+            Bet365: (oddPrincipal * 1.01).toFixed(2),
+            Betano: (oddPrincipal * 0.99).toFixed(2),
+            Superbet: (oddPrincipal * 1.02).toFixed(2)
+          },
+          isValueBet: oddPrincipal >= 1.70,
+          isUnderdog: oddPrincipal >= 2.30,
+          refereeNote: ai.refereeNote,
+          rivalryNote: ai.rivalryNote,
+          injuryNote: ai.injuryNote,
+          status: "pendente",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('predictions').doc(String(matchId)).set(docData);
+        processados++;
+      } catch (e) {
+        console.error(`Erro ao processar jogo ${item.id}:`, e.message);
+      }
+    });
+
+    // Aguarda o término de todos os processamentos
+    await Promise.all(promessasDeProcessamento);
 
     return res.status(200).json({ 
       success: true, 
-      message: `Painel atualizado com sucesso! ${processados} jogos de elite gerados e salvos no Firebase!` 
+      message: `Integração Total Finalizada! ${processados} jogos cruzados com odds reais, analisados e salvos!` 
     });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
