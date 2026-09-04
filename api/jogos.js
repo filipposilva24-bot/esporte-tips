@@ -23,45 +23,57 @@ const LIGAS_DE_ELITE_IDS = [
 ];
 
 async function buscarJogosDoDia(apiFootballKey) {
-  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  // Data exata de hoje no Brasil formatada de forma 100% segura para API
+  const agora = new Date();
+  const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
+  const partes = new Intl.DateTimeFormat('en-CA', options).formatToParts(agora);
+  const ano = partes.find(p => p.type === 'year').value;
+  const mes = partes.find(p => p.type === 'month').value;
+  const dia = partes.find(p => p.type === 'day').value;
+  const hoje = `${ano}-${mes}-${dia}`;
   
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { 
-      headers: { 'x-apisports-key': apiFootballKey } 
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (data.response && data.response.length > 0) {
-        let jogosFiltrados = data.response.filter(item => 
-          LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
-        );
+  console.log("Buscando jogos para a data:", hoje);
 
-        // Rede de segurança: se a elite estrita estiver vazia, pega os jogos profissionais do dia
-        if (jogosFiltrados.length === 0) {
-          jogosFiltrados = data.response.filter(item => item.league.id !== 45);
-        }
-        
-        const prioridadeLigas = {
-          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
-          73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
-          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
-        };
-
-        jogosFiltrados.sort((a, b) => {
-          const pA = prioridadeLigas[a.league.id] || 99;
-          const pB = prioridadeLigas[b.league.id] || 99;
-          return pA - pB;
-        });
-
-        return jogosFiltrados.slice(0, 5); // Pega até 5 jogos para poupar taxa de chamada única
-      }
-    }
-  } catch (e) {
-    console.log("Erro ao buscar fixtures:", e);
+  const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { 
+    headers: { 'x-apisports-key': apiFootballKey } 
+  });
+  
+  if (!res.ok) {
+    throw new Error(`Erro HTTP da API-Football: ${res.status}`);
+  }
+  
+  const data = await res.json();
+  
+  if (data.errors && Object.keys(data.errors).length > 0) {
+    throw new Error(`Erro retornado pela API-Football: ${JSON.stringify(data.errors)}`);
   }
 
-  return [];
+  if (!data.response || data.response.length === 0) {
+    return [];
+  }
+  
+  let jogosFiltrados = data.response.filter(item => 
+    LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
+  );
+
+  // Rede de segurança: se a elite estrita não retornar nada, pega os jogos profissionais do dia
+  if (jogosFiltrados.length === 0) {
+    jogosFiltrados = data.response.filter(item => item.league.id !== 45);
+  }
+  
+  const prioridadeLigas = {
+    71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
+    73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
+    72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
+  };
+
+  jogosFiltrados.sort((a, b) => {
+    const pA = prioridadeLigas[a.league.id] || 99;
+    const pB = prioridadeLigas[b.league.id] || 99;
+    return pA - pB;
+  });
+
+  return jogosFiltrados.slice(0, 5);
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
@@ -110,48 +122,9 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   }
 }
 
-async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
-  if (!accountSid || !authToken || !toNumber) return;
-
-  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
-  
-  palpitesGerados.forEach(p => {
-    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
-      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
-      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
-      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
-  });
-
-  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
-
-  try {
-    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-    
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        From: `whatsapp:${fromNumber}`,
-        To: `whatsapp:${toNumber}`,
-        Body: mensagem
-      })
-    });
-  } catch (err) {
-    console.error("Erro ao enviar WhatsApp:", err);
-  }
-}
-
 module.exports = async function handler(req, res) {
   const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
-  
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
-  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
   if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key da Football-API" });
@@ -160,11 +133,13 @@ module.exports = async function handler(req, res) {
     const matches = await buscarJogosDoDia(apiFootballKey);
     
     if (!matches || matches.length === 0) {
-       return res.status(200).json({ success: true, message: "Nenhum jogo disponível na API hoje." });
+       return res.status(200).json({ 
+         success: false, 
+         message: "A API-Football retornou zero jogos para a data de hoje. Verifique se o limite de cotas diárias da API foi atingido." 
+       });
     }
 
     let salvos = 0;
-    let listaParaWhatsapp = [];
 
     for (const item of matches) {
       const fixtureId = item.fixture.id;
@@ -214,18 +189,13 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
-      listaParaWhatsapp.push(docData);
       salvos++;
       
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
-      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
-    }
-
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase usando a cota final.` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos de hoje gravados no Firebase!` });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, erroCritico: err.message });
   }
 };
