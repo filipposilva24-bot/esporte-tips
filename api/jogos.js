@@ -12,12 +12,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// 🛑 MODO SIMULADOR: SEM USO DA API-FOOTBALL (ZERO GASTO DE REQUISIÇÕES)
+// 🛑 MODO SIMULADOR: Testando a IA 3.6-flash com Firebase
 async function buscarJogosMock() {
-  console.log("Iniciando MODO SIMULADOR: Testando IA e Firebase sem gastar limite de API.");
-  
-  // Criando 3 jogos de elite fictícios para o teste
-  const jogosMock = [
+  return [
     {
       fixture: { id: 999001, date: "2026-09-04T16:00:00-03:00", referee: "Michael Oliver" },
       league: { id: 39, name: "Premier League", country: "England" },
@@ -34,44 +31,22 @@ async function buscarJogosMock() {
       teams: { home: { name: "VfB Stuttgart" }, away: { name: "1. FC Köln" } }
     }
   ];
-
-  return jogosMock;
 }
 
-// Simulando dados avançados e jogadores para entregar à IA (Substituindo o endpoint de odds)
 async function buscarDadosOddsMock(homeTeam) {
   if (homeTeam === "Arsenal") {
-    return {
-      bookmaker: "Bet365",
-      jogadoresExtraidos: [
-        { mercado: "Player Shots on Target", jogador: "Bukayo Saka", odd: 1.83 },
-        { mercado: "Player To Score", jogador: "Mohamed Salah", odd: 2.40 },
-        { mercado: "Player Shots", jogador: "Martin Odegaard", odd: 1.55 }
-      ]
-    };
+    return { bookmaker: "Bet365", jogadoresExtraidos: [{ mercado: "Player Shots on Target", jogador: "Bukayo Saka", odd: 1.83 }, { mercado: "Player To Score", jogador: "Mohamed Salah", odd: 2.40 }] };
   } else if (homeTeam === "Genoa") {
-    return {
-      bookmaker: "Betano",
-      jogadoresExtraidos: [
-        { mercado: "Player To Score", jogador: "Mateo Retegui", odd: 2.90 },
-        { mercado: "Player Shots on Target", jogador: "Albert Gudmundsson", odd: 1.75 },
-        { mercado: "Player Shots", jogador: "Patrick Cutrone", odd: 1.95 }
-      ]
-    };
+    return { bookmaker: "Betano", jogadoresExtraidos: [{ mercado: "Player To Score", jogador: "Mateo Retegui", odd: 2.90 }, { mercado: "Player Shots", jogador: "Albert Gudmundsson", odd: 1.75 }] };
   } else {
-    return {
-      bookmaker: "Superbet",
-      jogadoresExtraidos: [
-        { mercado: "Player To Score", jogador: "Serhou Guirassy", odd: 2.10 },
-        { mercado: "Player Shots on Target", jogador: "Chris Führich", odd: 1.85 },
-        { mercado: "Player Shots", jogador: "Florian Kainz", odd: 2.20 }
-      ]
-    };
+    return { bookmaker: "Superbet", jogadoresExtraidos: [{ mercado: "Player To Score", jogador: "Serhou Guirassy", odd: 2.10 }, { mercado: "Player Shots on Target", jogador: "Chris Führich", odd: 1.85 }] };
   }
 }
 
 async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
+  
+  // USANDO O MODELO 3.6-FLASH QUE APARECE NO SEU PRINT!
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
@@ -86,20 +61,20 @@ async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey)
   REGRAS ABSOLUTAS:
   1. É PROIBIDO usar termos genéricos (Destaque, Atleta, Artilheiro). Escolha um dos jogadores da lista acima pelo NOME.
   2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Empate").
-  3. No campo "playerBetOdd", use um valor coerente (ex: 2.15).
+  3. No campo "playerBetOdd", use um valor numérico decimal coerente (ex: 2.15).
 
-  Retorne JSON PURO e VÁLIDO com esta estrutura:
+  Retorne JSON PURO (sem markdown) com esta estrutura exata:
   {
     "mainMarket": "Mercado principal",
     "mainOdd": 1.88,
     "mainConfidence": 88,
-    "mainAnalysis": "Análise tática detalhada",
+    "mainAnalysis": "Análise tática",
     "criarApostaMarket": "Criar Aposta: Combinada equipe",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa",
     "playerBetMarket": "Especiais: [NOME DO JOGADOR] + Aposta combinada",
     "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Análise focada no jogador escolhido",
+    "playerBetAnalysis": "Análise focada no jogador",
     "refereeNote": "Análise do árbitro",
     "rivalryNote": "Contexto",
     "injuryNote": "Desfalques"
@@ -109,25 +84,15 @@ async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey)
   let textResponse = result.response.text();
   textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-  let jsonParsed = JSON.parse(textResponse);
-
-  // Trava de software caso a IA não obedeça:
-  if (jsonParsed.playerBetMarket.includes("Destaque") || jsonParsed.playerBetMarket.includes("Atleta Principal")) {
-    const backupPlayer = dadosOdds.jogadoresExtraidos[0].jogador;
-    jsonParsed.playerBetMarket = `Especiais: ${backupPlayer} 1+ Finalização no Alvo`;
-    jsonParsed.playerBetAnalysis = `As estatísticas recentes de ${backupPlayer} indicam alto volume ofensivo nesta partida.`;
-  }
-
-  return jsonParsed;
+  return JSON.parse(textResponse);
 }
 
 module.exports = async function handler(req, res) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
-  
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
 
   try {
-    const matches = await buscarJogosMock(); // Puxando do MOCK
+    const matches = await buscarJogosMock();
     let salvos = 0;
 
     for (const item of matches) {
@@ -137,7 +102,7 @@ module.exports = async function handler(req, res) {
       const league = item.league.name;
       const referee = item.fixture.referee;
 
-      const dadosOdds = await buscarDadosOddsMock(home); // Puxando odds do MOCK
+      const dadosOdds = await buscarDadosOddsMock(home);
 
       let ai;
       try {
@@ -148,44 +113,22 @@ module.exports = async function handler(req, res) {
       }
 
       const oddPrincipal = Number(ai.mainOdd) || 1.85;
-
       const docData = {
-        matchName: `${home} vs ${away}`,
-        league,
-        country: item.league.country,
-        market: ai.mainMarket,
-        odd: oddPrincipal,
-        confidence: Number(ai.mainConfidence) || 85,
-        analysis: ai.mainAnalysis,
-        criarApostaMarket: ai.criarApostaMarket,
-        criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
-        criarApostaAnalysis: ai.criarApostaAnalysis,
-        playerBetMarket: ai.playerBetMarket,
-        playerBetOdd: Number(ai.playerBetOdd) || 2.10,
-        playerBetAnalysis: ai.playerBetAnalysis,
-        bookmaker: dadosOdds.bookmaker,
-        matchDate: item.fixture.date,
-        comparadorOdds: {
-          Bet365: (oddPrincipal * 1.01).toFixed(2),
-          Betano: (oddPrincipal * 0.99).toFixed(2),
-          Superbet: (oddPrincipal * 1.02).toFixed(2)
-        },
-        isValueBet: oddPrincipal >= 1.70,
-        isUnderdog: oddPrincipal >= 2.30,
-        refereeNote: ai.refereeNote,
-        rivalryNote: ai.rivalryNote,
-        injuryNote: ai.injuryNote,
-        status: "pendente",
+        matchName: `${home} vs ${away}`, league, country: item.league.country,
+        market: ai.mainMarket, odd: oddPrincipal, confidence: Number(ai.mainConfidence) || 85, analysis: ai.mainAnalysis,
+        criarApostaMarket: ai.criarApostaMarket, criarApostaOdd: Number(ai.criarApostaOdd) || 1.95, criarApostaAnalysis: ai.criarApostaAnalysis,
+        playerBetMarket: ai.playerBetMarket, playerBetOdd: Number(ai.playerBetOdd) || 2.10, playerBetAnalysis: ai.playerBetAnalysis,
+        bookmaker: dadosOdds.bookmaker, matchDate: item.fixture.date, status: "pendente",
+        comparadorOdds: { Bet365: (oddPrincipal * 1.01).toFixed(2), Betano: (oddPrincipal * 0.99).toFixed(2), Superbet: (oddPrincipal * 1.02).toFixed(2) },
+        isValueBet: oddPrincipal >= 1.70, isUnderdog: oddPrincipal >= 2.30, refereeNote: ai.refereeNote, rivalryNote: ai.rivalryNote, injuryNote: ai.injuryNote,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
       salvos++;
-      
       await new Promise(r => setTimeout(r, 2000));
     }
-
-    return res.status(200).json({ success: true, message: `MODO SIMULADOR: Painel atualizado com ${salvos} jogos de teste!` });
+    return res.status(200).json({ success: true, message: `MODO SIMULADOR 3.6: Painel atualizado com ${salvos} jogos de teste!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
