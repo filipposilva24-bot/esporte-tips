@@ -12,6 +12,17 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// LISTA COMPLETA: Elite, Séries B principais e Copas Nacionais/Continentais
+const LIGAS_DE_ELITE_IDS = [
+  71, 72, 73,       // Brasil (Série A, Série B, Copa do Brasil)
+  39, 40, 45,       // Inglaterra (Premier League, Championship, FA Cup)
+  140, 141, 143,    // Espanha (La Liga, La Liga 2, Copa del Rey)
+  135, 136, 137,    // Itália (Serie A, Serie B, Coppa Italia)
+  78, 79, 81,       // Alemanha (Bundesliga, 2. Bundesliga, DFB Pokal)
+  61, 62,           // França (Ligue 1, Ligue 2)
+  2, 3, 848, 13, 11 // Internacionais (Champions, Europa, Conference, Libertadores, Sul-Americana)
+];
+
 async function buscarJogosDoDia(apiFootballKey) {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   
@@ -23,13 +34,26 @@ async function buscarJogosDoDia(apiFootballKey) {
     if (res.ok) {
       const data = await res.json();
       if (data.response && data.response.length > 0) {
-        console.log(`Jogos reais encontrados para hoje (${hoje}): ${data.response.length}`);
-        return data.response.slice(0, 4);
+        // Log para você inspecionar no console da Vercel quais ligas vieram hoje da API
+        console.log(`Total de jogos na API hoje: ${data.response.length}`);
+        
+        // Filtra estritamente pelos IDs das principais ligas e copas
+        const jogosFiltrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
+        
+        console.log(`Jogos que passaram no filtro de elite/copas: ${jogosFiltrados.length}`);
+        
+        if (jogosFiltrados.length > 0) {
+          return jogosFiltrados.slice(0, 5); // Pega até 5 jogos para processar
+        }
       }
     }
   } catch (e) {
-    console.log("API-Football indisponível ou limite atingido.");
+    console.log("Erro ao buscar fixtures na API-Football:", e);
   }
+
+  return []; // Retorna vazio se não houver jogos hoje nessas ligas (evitando o fallback fictício para você ver exatamente o que a API tem)
+}
+
 
   // Fallback Defensivo Automático
   console.log("⚠️ Ativando fallback defensivo para manter o painel alimentado.");
