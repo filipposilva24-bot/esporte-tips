@@ -37,7 +37,7 @@ async function buscarJogosDoDia(apiFootballKey) {
           LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
         );
 
-        // Rede de segurança: se não houver elite exata hoje, pega os jogos profissionais disponíveis
+        // Rede de segurança: se a elite estrita estiver vazia, pega os jogos profissionais do dia
         if (jogosFiltrados.length === 0) {
           jogosFiltrados = data.response.filter(item => item.league.id !== 45);
         }
@@ -54,7 +54,7 @@ async function buscarJogosDoDia(apiFootballKey) {
           return pA - pB;
         });
 
-        return jogosFiltrados.slice(0, 5); 
+        return jogosFiltrados.slice(0, 5); // Pega até 5 jogos para poupar taxa de chamada única
       }
     }
   } catch (e) {
@@ -66,8 +66,6 @@ async function buscarJogosDoDia(apiFootballKey) {
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
-  
-  // Modelo universal definitivo compatível com todas as chaves de API do Google AI Studio
   const model = genAI.getGenerativeModel({ 
     model: "gemini-1.5-pro", 
     generationConfig: { responseMimeType: "application/json" } 
@@ -226,7 +224,7 @@ module.exports = async function handler(req, res) {
       await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase e enviados ao WhatsApp.` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase usando a cota final.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
