@@ -37,18 +37,18 @@ async function gerarPalpiteIA(home, away, league, referee, groqKey) {
 
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata (sem incluir player props ou nomes de jogadores fictícios):
   {
-    "mainMarket": "Mercado principal específico",
+    "mainMarket": "Mercado principal específico (ex: Vitória Simples, Mais de 2.5 Gols)",
     "mainOdd": 1.88,
     "mainConfidence": 88,
-    "mainAnalysis": "Análise tática detalhada do confronto.",
-    "criarApostaMarket": "Criar Aposta: Combinada específica",
+    "mainAnalysis": "Análise tática detalhada do confronto para o mercado principal.",
+    "criarApostaMarket": "Criar Aposta: Combinada realista (ex: Vitória ou Empate + Mais de 1.5 Gols)",
     "criarApostaOdd": 1.95,
-    "criarApostaAnalysis": "Justificativa técnica.",
-    "refereeNote": "Análise do árbitro ${referee}",
-    "rivalryNote": "Contexto histórico ou tabela",
-    "injuryNote": "Panorama de desfalques"
+    "criarApostaAnalysis": "Justificativa técnica sólida para a aposta combinada.",
+    "refereeNote": "Análise comportamental do árbitro ${referee} quanto a cartões e critério de faltas",
+    "rivalryNote": "Contexto histórico do confronto ou situação atual na tabela",
+    "injuryNote": "Panorama geral de desfalques por setor da equipe, sem citar nomes de atletas"
   }`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -129,7 +129,7 @@ module.exports = async function handler(req, res) {
 
     await db.collection('predictions').doc(String(matchId)).set(docData);
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Jogo gerado e salvo no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Mercado Principal e Criar Aposta salvos no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
