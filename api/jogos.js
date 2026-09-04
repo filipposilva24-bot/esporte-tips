@@ -32,10 +32,10 @@ async function buscarJogosDoDia(footballDataKey) {
   return data.matches.slice(0, 1);
 }
 
-async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
+async function gerarPalpiteIA(home, away, league, referee, openAiKey) {
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
+  Retorne um JSON com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
@@ -49,48 +49,36 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  // Identifica se é o novo token do Google Cloud (AQ...) ou chave tradicional (AIza...)
-  const isBearerToken = geminiKey.startsWith('AQ');
-  
-  const url = isBearerToken
-    ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
-    : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (isBearerToken) {
-    headers['Authorization'] = `Bearer ${geminiKey}`;
-  }
-
-  const response = await fetch(url, {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: 'POST',
-    headers: headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openAiKey}`
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Você é um analista esportivo profissional que retorna estritamente JSON válido." },
+        { role: "user", content: prompt }
+      ],
+      response_format: { type: "json_object" }
     })
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Erro na API do Gemini (${response.status}): ${errText}`);
+    throw new Error(`Erro na API da OpenAI (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
-  const textResponse = data.candidates[0].content.parts[0].text;
-  
-  let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-  const match = cleanText.match(/\{[\s\S]*\}/);
-  if (match) {
-    return JSON.parse(match[0]);
-  }
-  return JSON.parse(cleanText);
+  return JSON.parse(data.choices[0].message.content);
 }
 
 module.exports = async function handler(req, res) {
   const footballDataKey = process.env.FOOTBALL_DATA_KEY || 'f8928c309caf420b9cfab4a8a906de73';
-  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
   
-  if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
+  if (!openAiKey) return res.status(500).json({ success: false, error: "Falta API Key da OpenAI (OPENAI_API_KEY)" });
   if (!footballDataKey) return res.status(500).json({ success: false, error: "Falta API Key da football-data.org" });
 
   try {
@@ -107,7 +95,7 @@ module.exports = async function handler(req, res) {
     const league = item.competition.name;
     const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
 
-    const ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
+    const ai = await gerarPalpiteIA(home, away, league, referee, openAiKey);
     const oddPrincipal = Number(ai.mainOdd) || 1.85;
 
     const docData = {
@@ -139,7 +127,7 @@ module.exports = async function handler(req, res) {
 
     await db.collection('predictions').doc(String(matchId)).set(docData);
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Jogo gerado e salvo no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso via OpenAI! Jogo salvo no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
