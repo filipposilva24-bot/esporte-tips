@@ -29,7 +29,18 @@ async function buscarJogosDoDia(footballDataKey) {
   const data = await res.json();
   if (!data.matches || data.matches.length === 0) return [];
 
-  return data.matches.slice(0, 1);
+  // Ligas oficiais de elite suportadas pela API
+  const ligasElite = ['CL', 'BL1', 'BSA', 'PD', 'FL1', 'EC', 'SA', 'PL'];
+
+  // Filtra estritamente para pegar apenas jogos destas competições
+  const jogosElite = data.matches.filter(match => ligasElite.includes(match.competition?.code));
+
+  if (jogosElite.length === 0) {
+    return [];
+  }
+
+  // Retorna no máximo 10 jogos do dia
+  return jogosElite.slice(0, 10);
 }
 
 async function gerarPalpiteIA(home, away, league, referee, groqKey) {
@@ -87,49 +98,57 @@ module.exports = async function handler(req, res) {
     const matches = await buscarJogosDoDia(footballDataKey);
     
     if (!matches || matches.length === 0) {
-       return res.status(200).json({ success: false, message: "Zero jogos encontrados hoje." });
+       return res.status(200).json({ success: false, message: "Nenhum jogo das ligas de elite encontrado para hoje." });
     }
 
-    const item = matches[0];
-    const matchId = item.id;
-    const home = item.homeTeam.name;
-    const away = item.awayTeam.name;
-    const league = item.competition.name;
-    const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
+    let processados = 0;
 
-    const ai = await gerarPalpiteIA(home, away, league, referee, groqKey);
-    const oddPrincipal = Number(ai.mainOdd) || 1.85;
+    // Loop para processar e salvar cada um dos jogos de elite (até 10)
+    for (const item of matches) {
+      const matchId = item.id;
+      const home = item.homeTeam.name;
+      const away = item.awayTeam.name;
+      const league = item.competition.name;
+      const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
 
-    const docData = {
-      matchName: `${home} vs ${away}`,
-      league,
-      country: item.competition.area?.name || "Internacional",
-      market: ai.mainMarket,
-      odd: oddPrincipal,
-      confidence: Number(ai.mainConfidence) || 85,
-      analysis: ai.mainAnalysis,
-      criarApostaMarket: ai.criarApostaMarket,
-      criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
-      criarApostaAnalysis: ai.criarApostaAnalysis,
-      bookmaker: "Bet365",
-      matchDate: item.utcDate,
-      comparadorOdds: {
-        Bet365: (oddPrincipal * 1.01).toFixed(2),
-        Betano: (oddPrincipal * 0.99).toFixed(2),
-        Superbet: (oddPrincipal * 1.02).toFixed(2)
-      },
-      isValueBet: oddPrincipal >= 1.70,
-      isUnderdog: oddPrincipal >= 2.30,
-      refereeNote: ai.refereeNote,
-      rivalryNote: ai.rivalryNote,
-      injuryNote: ai.injuryNote,
-      status: "pendente",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+      const ai = await gerarPalpiteIA(home, away, league, referee, groqKey);
+      const oddPrincipal = Number(ai.mainOdd) || 1.85;
 
-    await db.collection('predictions').doc(String(matchId)).set(docData);
+      const docData = {
+        matchName: `${home} vs ${away}`,
+        league,
+        country: item.competition.area?.name || "Internacional",
+        market: ai.mainMarket,
+        odd: oddPrincipal,
+        confidence: Number(ai.mainConfidence) || 85,
+        analysis: ai.mainAnalysis,
+        criarApostaMarket: ai.criarApostaMarket,
+        criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
+        criarApostaAnalysis: ai.criarApostaAnalysis,
+        bookmaker: "Bet365",
+        matchDate: item.utcDate,
+        comparadorOdds: {
+          Bet365: (oddPrincipal * 1.01).toFixed(2),
+          Betano: (oddPrincipal * 0.99).toFixed(2),
+          Superbet: (oddPrincipal * 1.02).toFixed(2)
+        },
+        isValueBet: oddPrincipal >= 1.70,
+        isUnderdog: oddPrincipal >= 2.30,
+        refereeNote: ai.refereeNote,
+        rivalryNote: ai.rivalryNote,
+        injuryNote: ai.injuryNote,
+        status: "pendente",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      };
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Mercado Principal e Criar Aposta salvos no Firebase!` });
+      await db.collection('predictions').doc(String(matchId)).set(docData);
+      processados++;
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `Painel atualizado com sucesso! ${processados} jogos de elite gerados e salvos no Firebase!` 
+    });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
