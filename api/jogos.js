@@ -12,183 +12,139 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// LISTA REFINADA: Apenas Elite e Séries B principais (FA Cup ID 45 banida permanentemente)
-const LIGAS_DE_ELITE_IDS = [
-  71, 72, 73,       // Brasil (Série A, Série B, Copa do Brasil)
-  39, 40,           // Inglaterra (Premier League, Championship)
-  140, 141, 143,    // Espanha (La Liga, La Liga 2, Copa del Rey)
-  135, 136, 137,    // Itália (Serie A, Serie B, Coppa Italia)
-  78, 79, 81,       // Alemanha (Bundesliga, 2. Bundesliga, DFB Pokal)
-  61, 62,           // França (Ligue 1, Ligue 2)
-  2, 3, 848, 13, 11 // Internacionais (Champions, Europa, Conference, Libertadores, Sul-Americana)
-];
-
-async function buscarJogosDoDia(apiFootballKey) {
-  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+// 🛑 MODO SIMULADOR: SEM USO DA API-FOOTBALL (ZERO GASTO DE REQUISIÇÕES)
+async function buscarJogosMock() {
+  console.log("Iniciando MODO SIMULADOR: Testando IA e Firebase sem gastar limite de API.");
   
-  try {
-    const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { 
-      headers: { 'x-apisports-key': apiFootballKey } 
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (data.response && data.response.length > 0) {
-        console.log(`Total de jogos na API hoje: ${data.response.length}`);
-        
-        // Filtra pelas ligas permitidas e EXCLUI obrigatoriamente a FA Cup (ID 45) caso venha na lista
-        const jogosFiltrados = data.response.filter(item => 
-          LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
-        );
-        
-        // TABELA DE PESOS: 1ª Divisão (1) -> Copas Profissionais (2) -> Séries B (3)
-        const prioridadeLigas = {
-          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1, // Elite & Continentais
-          73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,       // Copas Nacionais
-          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3              // Séries B
-        };
-
-        jogosFiltrados.sort((a, b) => {
-          const pA = prioridadeLigas[a.league.id] || 99;
-          const pB = prioridadeLigas[b.league.id] || 99;
-          return pA - pB;
-        });
-
-        console.log(`Jogos ordenados por prioridade (Sem FA Cup): ${jogosFiltrados.length}`);
-        
-        if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 10); 
-        }
-      }
+  // Criando 3 jogos de elite fictícios para o teste
+  const jogosMock = [
+    {
+      fixture: { id: 999001, date: "2026-09-04T16:00:00-03:00", referee: "Michael Oliver" },
+      league: { id: 39, name: "Premier League", country: "England" },
+      teams: { home: { name: "Arsenal" }, away: { name: "Liverpool" } }
+    },
+    {
+      fixture: { id: 999002, date: "2026-09-04T15:45:00-03:00", referee: "Marco Guida" },
+      league: { id: 135, name: "Serie A", country: "Italy" },
+      teams: { home: { name: "Genoa" }, away: { name: "Como" } }
+    },
+    {
+      fixture: { id: 999003, date: "2026-09-04T15:30:00-03:00", referee: "Felix Zwayer" },
+      league: { id: 78, name: "Bundesliga", country: "Germany" },
+      teams: { home: { name: "VfB Stuttgart" }, away: { name: "1. FC Köln" } }
     }
-  } catch (e) {
-    console.log("Erro ao buscar fixtures na API-Football:", e);
-  }
+  ];
 
-  return [];
+  return jogosMock;
 }
 
-async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
+// Simulando dados avançados e jogadores para entregar à IA (Substituindo o endpoint de odds)
+async function buscarDadosOddsMock(homeTeam) {
+  if (homeTeam === "Arsenal") {
+    return {
+      bookmaker: "Bet365",
+      jogadoresExtraidos: [
+        { mercado: "Player Shots on Target", jogador: "Bukayo Saka", odd: 1.83 },
+        { mercado: "Player To Score", jogador: "Mohamed Salah", odd: 2.40 },
+        { mercado: "Player Shots", jogador: "Martin Odegaard", odd: 1.55 }
+      ]
+    };
+  } else if (homeTeam === "Genoa") {
+    return {
+      bookmaker: "Betano",
+      jogadoresExtraidos: [
+        { mercado: "Player To Score", jogador: "Mateo Retegui", odd: 2.90 },
+        { mercado: "Player Shots on Target", jogador: "Albert Gudmundsson", odd: 1.75 },
+        { mercado: "Player Shots", jogador: "Patrick Cutrone", odd: 1.95 }
+      ]
+    };
+  } else {
+    return {
+      bookmaker: "Superbet",
+      jogadoresExtraidos: [
+        { mercado: "Player To Score", jogador: "Serhou Guirassy", odd: 2.10 },
+        { mercado: "Player Shots on Target", jogador: "Chris Führich", odd: 1.85 },
+        { mercado: "Player Shots", jogador: "Florian Kainz", odd: 2.20 }
+      ]
+    };
+  }
+}
+
+async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
-  const prompt = `Você é um Tipster Profissional de Elite especialista em futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
+  const listaNomes = dadosOdds.jogadoresExtraidos.map(j => `${j.jogador} (${j.mercado} @${j.odd})`).join(', ');
+
+  const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
+  
+  ⚠️ AVISO CRÍTICO: USE EXATAMENTE ESTES JOGADORES CONFIRMADOS: [ ${listaNomes} ].
   
   REGRAS ABSOLUTAS:
-  1. É ESTRITAMENTE PROIBIDO usar termos genéricos como "Destaque", "Atleta Principal", "Jogador da Casa" ou similares. Cite obrigatoriamente o **nome e sobrenome real de um jogador titular específico** que atua em ${home} ou ${away} (Ex: Kylian Mbappé, Harry Kane, Vinicius Jr, etc.).
-  2. No campo "playerBetMarket", crie um Especial Combinado avançado utilizando o nome real do atleta.
-  3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15 a 3.40).
-  4. Crie análises táticas profundas e mercados 100% únicos baseados no momento atual de ${home} e ${away}.
+  1. É PROIBIDO usar termos genéricos (Destaque, Atleta, Artilheiro). Escolha um dos jogadores da lista acima pelo NOME.
+  2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Empate").
+  3. No campo "playerBetOdd", use um valor coerente (ex: 2.15).
 
-  Retorne EXATAMENTE um JSON puro (sem markdown, sem \`\`\`json) com esta estrutura exata:
+  Retorne JSON PURO e VÁLIDO com esta estrutura:
   {
-    "mainMarket": "Mercado principal específico",
+    "mainMarket": "Mercado principal",
     "mainOdd": 1.88,
     "mainConfidence": 88,
-    "mainAnalysis": "Análise tática detalhada e específica do confronto.",
-    "criarApostaMarket": "Criar Aposta: [Combinada específica da partida]",
+    "mainAnalysis": "Análise tática detalhada",
+    "criarApostaMarket": "Criar Aposta: Combinada equipe",
     "criarApostaOdd": 1.95,
-    "criarApostaAnalysis": "Justificativa técnica da aposta combinada.",
-    "playerBetMarket": "Especiais: [Nome Real e Sobrenome do Jogador] [Aposta combinada focada no atleta]",
+    "criarApostaAnalysis": "Justificativa",
+    "playerBetMarket": "Especiais: [NOME DO JOGADOR] + Aposta combinada",
     "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Justificativa tática detalhada do desempenho recente do atleta citando seu nome.",
-    "refereeNote": "Análise específica do impacto disciplinar do árbitro ${referee}",
-    "rivalryNote": "Contexto histórico ou de tabela real entre os clubes",
-    "injuryNote": "Panorama real de desfalques prováveis"
+    "playerBetAnalysis": "Análise focada no jogador escolhido",
+    "refereeNote": "Análise do árbitro",
+    "rivalryNote": "Contexto",
+    "injuryNote": "Desfalques"
   }`;
 
   const result = await model.generateContent(prompt);
   let textResponse = result.response.text();
-  
-  // CORREÇÃO DA VARIÁVEL DE LIMPEZA (Agora usa textResponse corretamente)
   textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
   let jsonParsed = JSON.parse(textResponse);
 
-  // TRAVA EXTRA DE SEGURANÇA: Se a IA mandar termo genérico, substituímos de forma inteligente
-  if (
-    jsonParsed.playerBetMarket.includes("Destaque") || 
-    jsonParsed.playerBetMarket.includes("Atleta Principal") || 
-    jsonParsed.playerBetMarket.includes("Principal Nome")
-  ) {
-    jsonParsed.playerBetMarket = `Especiais: Atacante titular de ${home} 1+ Finalização no Alvo`;
-    jsonParsed.playerBetAnalysis = `Volume ofensivo elevado do principal homem de referência na área de ${home}.`;
+  // Trava de software caso a IA não obedeça:
+  if (jsonParsed.playerBetMarket.includes("Destaque") || jsonParsed.playerBetMarket.includes("Atleta Principal")) {
+    const backupPlayer = dadosOdds.jogadoresExtraidos[0].jogador;
+    jsonParsed.playerBetMarket = `Especiais: ${backupPlayer} 1+ Finalização no Alvo`;
+    jsonParsed.playerBetAnalysis = `As estatísticas recentes de ${backupPlayer} indicam alto volume ofensivo nesta partida.`;
   }
 
   return jsonParsed;
 }
 
-async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
-  if (!accountSid || !authToken || !toNumber) return;
-
-  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
-  
-  palpitesGerados.forEach(p => {
-    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
-      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
-      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
-      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
-  });
-
-  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
-
-  try {
-    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-    
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        From: `whatsapp:${fromNumber}`,
-        To: `whatsapp:${toNumber}`,
-        Body: mensagem
-      })
-    });
-  } catch (err) {
-    console.error("Erro ao enviar mensagem para o WhatsApp:", err);
-  }
-}
-
 module.exports = async function handler(req, res) {
-  const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
-  
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
-  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
 
   try {
-    const matches = await buscarJogosDoDia(apiFootballKey);
-    
-    if (!matches || matches.length === 0) {
-       return res.status(200).json({ success: true, message: "Nenhum jogo das ligas de elite/copas encontrado para a data de hoje." });
-    }
-
+    const matches = await buscarJogosMock(); // Puxando do MOCK
     let salvos = 0;
-    let listaParaWhatsapp = [];
 
     for (const item of matches) {
       const fixtureId = item.fixture.id;
       const home = item.teams.home.name;
       const away = item.teams.away.name;
       const league = item.league.name;
-      const referee = item.fixture.referee || "Árbitro Oficial";
+      const referee = item.fixture.referee;
+
+      const dadosOdds = await buscarDadosOddsMock(home); // Puxando odds do MOCK
 
       let ai;
       try {
-        ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
+        ai = await gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiApiKey);
       } catch (errAI) {
-        console.error(`❌ Erro crítico na IA para ${home} vs ${away}:`, errAI.message);
-        continue; // Pula o jogo se houver qualquer falha real na IA
+        console.error(`Erro na IA para ${home} vs ${away}:`, errAI.message);
+        continue; 
       }
 
       const oddPrincipal = Number(ai.mainOdd) || 1.85;
@@ -196,7 +152,7 @@ module.exports = async function handler(req, res) {
       const docData = {
         matchName: `${home} vs ${away}`,
         league,
-        country: item.league.country || "Internacional",
+        country: item.league.country,
         market: ai.mainMarket,
         odd: oddPrincipal,
         confidence: Number(ai.mainConfidence) || 85,
@@ -207,7 +163,7 @@ module.exports = async function handler(req, res) {
         playerBetMarket: ai.playerBetMarket,
         playerBetOdd: Number(ai.playerBetOdd) || 2.10,
         playerBetAnalysis: ai.playerBetAnalysis,
-        bookmaker: "Bet365",
+        bookmaker: dadosOdds.bookmaker,
         matchDate: item.fixture.date,
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
@@ -224,18 +180,12 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
-      listaParaWhatsapp.push(docData);
       salvos++;
       
-      // Pausa de 3 segundos entre as requisições
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
-      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
-    }
-
-    return res.status(200).json({ success: true, message: `Painel atualizado! ${salvos} jogos processados com sucesso.` });
+    return res.status(200).json({ success: true, message: `MODO SIMULADOR: Painel atualizado com ${salvos} jogos de teste!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
