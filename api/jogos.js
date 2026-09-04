@@ -56,7 +56,7 @@ async function gerarPalpiteIA(home, away, league, referee, groqKey) {
       'Authorization': `Bearer ${groqKey}`
     },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
+      model: "llama3-8b-8192",
       messages: [
         { role: "system", content: "Você é um analista esportivo profissional que retorna estritamente JSON válido." },
         { role: "user", content: prompt }
