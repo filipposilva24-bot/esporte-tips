@@ -49,7 +49,7 @@ async function buscarJogosDoDia(apiFootballKey) {
           72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
         };
 
-        // Ordena os jogos do dia baseando-se na tabela de pesos acima
+        // Ordena os jogos colocando a elite máxima no topo
         jogosFiltrados.sort((a, b) => {
           const pA = prioridadeLigas[a.league.id] || 99;
           const pB = prioridadeLigas[b.league.id] || 99;
@@ -59,7 +59,8 @@ async function buscarJogosDoDia(apiFootballKey) {
         console.log(`Jogos ordenados por prioridade de elite: ${jogosFiltrados.length}`);
         
         if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 10); // Pega os 10 primeiros já priorizando a elite!
+          // TRAVA ABSOLUTA: Pega no máximo os 10 primeiros da elite/prioridade e descarta o resto
+          return jogosFiltrados.slice(0, 10); 
         }
       }
     }
@@ -69,6 +70,7 @@ async function buscarJogosDoDia(apiFootballKey) {
 
   return [];
 }
+
 
 
 // BUSCA DADOS REAIS E JOGADORES DIRETO DA API DE ODDS
