@@ -53,8 +53,7 @@ async function buscarJogosDoDia(apiFootballKey) {
           return pA - pB;
         });
 
-        // Pega apenas os 3 melhores para garantir velocidade e zerar erros de cota
-        return jogosFiltrados.slice(0, 3); 
+        return jogosFiltrados.slice(0, 5); // Pega os 5 principais para garantir velocidade e zerar erros
       }
     }
   } catch (e) {
@@ -66,9 +65,10 @@ async function buscarJogosDoDia(apiFootballKey) {
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
-  // Usando gemini-1.5-flash que é o modelo oficial mais estável para chaves de API de desenvolvedor
+  
+  // USANDO O MODELO 3.6-FLASH QUE A SUA CHAVE EXIGE
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-flash", 
+    model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
@@ -180,7 +180,7 @@ module.exports = async function handler(req, res) {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos gerados 100% por IA!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
