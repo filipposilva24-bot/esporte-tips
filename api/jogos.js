@@ -34,15 +34,6 @@ async function buscarJogosDoDia(footballDataKey) {
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
-  const genAI = new GoogleGenerativeAI(geminiKey);
-  
-  // ALTERADO PARA O MODELO COMPATÍVEL COM ESTA CHAVE
-  const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-pro", 
-    generationConfig: { responseMimeType: "application/json" } 
-  });
-  // Se ainda persistir, altere a string acima para "gemini-pro"
-
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
@@ -59,13 +50,30 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  const result = await model.generateContent(prompt);
-  let textResponse = result.response.text();
-  textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+  // Requisição HTTP direta para a API do Gemini (ignora problemas de versão do SDK Node.js)
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
 
-  const match = textResponse.match(/\{[\s\S]*\}/);
-  if (match) return JSON.parse(match[0]);
-  return JSON.parse(textResponse);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Erro na API do Gemini: ${response.status} - ${errText}`);
+  }
+
+  const data = await response.json();
+  const textResponse = data.candidates[0].content.parts[0].text;
+  
+  let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+  const match = cleanText.match(/\{[\s\S]*\}/);
+  if (match) {
+    return JSON.parse(match[0]);
+  }
+  return JSON.parse(cleanText);
 }
 
 module.exports = async function handler(req, res) {
