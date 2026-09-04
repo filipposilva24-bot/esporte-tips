@@ -66,23 +66,24 @@ async function gerarPalpiteIA(home, away, league, referee, oddsReaisTexto, groqK
   const prompt = `Você é um Tipster Profissional de Elite especialista em futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   REGRAS CRÍTICAS DE APOSTAS:
-  1. IDIOMA OBRIGATÓRIO: VOCÊ DEVE ESCREVER TUDO 100% EM PORTUGUÊS DO BRASIL. NUNCA use inglês.
-  2. ODDS E CONFIANÇA REALISTAS: Gere odds baseadas no favoritismo real. Para o campo 'mainConfidence', gere um número aleatório e lógico entre 72 e 98 (NÃO repita sempre 85).
-  3. MATEMÁTICA DA COMBINADA: Se usar "Dupla Chance" (Vitória ou Empate), a odd deve ser MENOR que a vitória simples.
-  4. TÍTULOS DESCRITIVOS: No campo 'criarApostaMarket', escreva EXATAMENTE qual é a aposta (ex: "Vitória do ${home} + Mais de 1.5 Gols"). É ESTRITAMENTE PROIBIDO usar títulos genéricos como "Combinada segura".
+  1. IDIOMA OBRIGATÓRIO: VOCÊ DEVE ESCREVER TUDO 100% EM PORTUGUÊS DO BRASIL.
+  2. VARIEDADE DE MERCADOS (MUITO IMPORTANTE): NÃO aposte apenas na vitória do favorito. Varie suas análises buscando OPORTUNIDADES DE VALOR. Você DEVE alternar entre opções como: "Ambas Marcam", "Menos de 2.5 Gols", "Empate Anula Aposta", Dupla Chance no Azarão, ou Vitória Seca apenas quando for a melhor opção.
+  3. VARIEDADE NO CRIAR APOSTA: NÃO use sempre "Vitória + Mais de 1.5 gols". Crie combinadas táticas e diferentes (ex: "Ambas Marcam + Empate Anula", "Dupla Chance do Azarão + Menos de 3.5 Gols"). É PROIBIDO usar títulos genéricos como "Combinada segura".
+  4. ODDS E CONFIANÇA REALISTAS: A odd deve fazer sentido matemático com o mercado escolhido (ex: apostar no azarão terá odd maior que 2.50). Gere uma confiança aleatória e variada entre 72 e 96.
+  5. MATEMÁTICA: A odd do "Criar Aposta" deve ser matematicamente coerente.
 
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura:
   {
-    "mainMarket": "Mercado principal (ex: Vitória do ${home})",
+    "mainMarket": "Mercado principal sugerido (ex: Ambas as Equipes Marcam - Sim)",
     "mainOdd": 0.00, // Número lógico
-    "mainConfidence": 0, // Número de 72 a 98
-    "mainAnalysis": "Análise tática 100% em português.",
-    "criarApostaMarket": "Nome EXATO da combinada", // PROIBIDO escrever 'Combinada segura'
+    "mainConfidence": 0, // Número de 72 a 96
+    "mainAnalysis": "Análise tática justificando a aposta de valor.",
+    "criarApostaMarket": "Nome EXATO da combinada (ex: Ambas Marcam + Mais de 2.5 Gols)",
     "criarApostaOdd": 0.00, // Número lógico
-    "criarApostaAnalysis": "Justificativa tática 100% em português.",
+    "criarApostaAnalysis": "Justificativa tática da combinada.",
     "refereeNote": "Análise do árbitro",
     "rivalryNote": "Contexto do jogo",
-    "injuryNote": "Panorama de desfalques"
+    "injuryNote": "Panorama de desfalques (sem inventar nomes)"
   }`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
