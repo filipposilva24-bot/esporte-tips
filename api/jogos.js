@@ -244,6 +244,6 @@ module.exports = async function handler(req, res) {
       message: `Análise Quantitativa Completa Concluída! ${processados} jogos processados com base na tabela real e odds de mercado.` 
     });
   } catch (err) {
-    return res.status(500).json({ success: false, erroCritico: err.message ?? err };
+    return res.status(500).json({ success: false, erroCritico: err.message ?? err });
   }
 };
