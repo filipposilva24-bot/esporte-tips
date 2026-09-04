@@ -225,7 +225,7 @@ module.exports = async function handler(req, res) {
     }
 
     return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos da elite gerados 100% por IA!` });
-  } cat (err) {
+  } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
