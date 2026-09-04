@@ -41,7 +41,7 @@ async function buscarJogosDoDia(apiFootballKey) {
         console.log(`Jogos que passaram no filtro de elite/copas: ${jogosFiltrados.length}`);
         
         if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 5); 
+          return jogosFiltrados.slice(0, 10); 
         }
       }
     }
