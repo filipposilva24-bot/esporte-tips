@@ -65,27 +65,24 @@ async function gerarPalpiteIA(home, away, league, referee, oddsReaisTexto, groqK
 
   const prompt = `Você é um Tipster Profissional de Elite especialista em futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
-  CENÁRIO DAS CASAS DE APOSTAS:
-  ${oddsReaisTexto}
-  
-  REGRAS CRÍTICAS:
-  1. ANÁLISE BASEADA EM FATOS: Se o Cenário das Casas mostrou as odds reais (Vitória Mandante/Visitante/Empate), use-as como base para entender o favoritismo real.
-  2. DEVOLVA UMA ODD COERENTE: No campo mainOdd, coloque a odd que faça sentido matemático com a realidade fornecida.
-  3. CRIAR APOSTA: A odd da combinada deve respeitar as leis da probabilidade (ex: Dupla Chance joga a odd pra baixo).
-  4. PROIBIDO: Não invente posições na tabela (ex: "zona de rebaixamento") se não souber. Fale de estilo de jogo, força ofensiva e tática.
+  REGRAS CRÍTICAS DE APOSTAS:
+  1. IDIOMA OBRIGATÓRIO: VOCÊ DEVE ESCREVER TUDO 100% EM PORTUGUÊS DO BRASIL. NUNCA use inglês.
+  2. ODDS E CONFIANÇA REALISTAS: Gere odds baseadas no favoritismo real. Para o campo 'mainConfidence', gere um número aleatório e lógico entre 72 e 98 (NÃO repita sempre 85).
+  3. MATEMÁTICA DA COMBINADA: Se usar "Dupla Chance" (Vitória ou Empate), a odd deve ser MENOR que a vitória simples.
+  4. TÍTULOS DESCRITIVOS: No campo 'criarApostaMarket', escreva EXATAMENTE qual é a aposta (ex: "Vitória do ${home} + Mais de 1.5 Gols"). É ESTRITAMENTE PROIBIDO usar títulos genéricos como "Combinada segura".
 
-  Retorne EXATAMENTE este JSON puro:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura:
   {
-    "mainMarket": "Mercado principal sugerido (ex: Vitória do ${home})",
-    "mainOdd": 0.00, // Preencha com valor numérico realístico
-    "mainConfidence": 85,
-    "mainAnalysis": "Análise tática sem inventar posições na tabela.",
-    "criarApostaMarket": "Criar Aposta: Combinada segura",
-    "criarApostaOdd": 0.00, // Valor matemático realístico
-    "criarApostaAnalysis": "Justificativa da combinada.",
-    "refereeNote": "Análise do perfil do árbitro ${referee}",
-    "rivalryNote": "Contexto histórico (sem inventar pontuações)",
-    "injuryNote": "Possíveis desfalques por setor (sem inventar nomes de atletas)"
+    "mainMarket": "Mercado principal (ex: Vitória do ${home})",
+    "mainOdd": 0.00, // Número lógico
+    "mainConfidence": 0, // Número de 72 a 98
+    "mainAnalysis": "Análise tática 100% em português.",
+    "criarApostaMarket": "Nome EXATO da combinada", // PROIBIDO escrever 'Combinada segura'
+    "criarApostaOdd": 0.00, // Número lógico
+    "criarApostaAnalysis": "Justificativa tática 100% em português.",
+    "refereeNote": "Análise do árbitro",
+    "rivalryNote": "Contexto do jogo",
+    "injuryNote": "Panorama de desfalques"
   }`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
