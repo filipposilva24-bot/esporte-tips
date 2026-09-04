@@ -35,14 +35,11 @@ async function buscarJogosDoDia(apiFootballKey) {
       if (data.response && data.response.length > 0) {
         console.log(`Total bruto de jogos na API hoje: ${data.response.length}`);
         
-        // Tenta filtrar pelas ligas de elite (removendo FA Cup ID 45)
         let jogosFiltrados = data.response.filter(item => 
           LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
         );
 
-        // 🛡️ REDE DE SEGURANÇA: Se a elite estiver vazia hoje, pega qualquer jogo profissional disponível para não deixar o painel zerado!
         if (jogosFiltrados.length === 0) {
-          console.log("Nenhum jogo da elite estrita hoje. Utilizando jogos disponíveis na API para garantir entradas.");
           jogosFiltrados = data.response.filter(item => item.league.id !== 45);
         }
         
@@ -82,7 +79,7 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Vitória").
   3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15).
 
-  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura:
+  Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
@@ -103,12 +100,60 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   let textResponse = result.response.text();
   textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-  return JSON.parse(textResponse);
+  try {
+    return JSON.parse(textResponse);
+  } catch (e) {
+    // Extractor robusto de JSON caso a IA inclua algum texto extra
+    const match = textResponse.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+    throw e;
+  }
+}
+
+async function enviarResumoWhatsApp(accountSid, authToken, fromNumber, toNumber, palpitesGerados) {
+  if (!accountSid || !authToken || !toNumber) return;
+
+  let mensagem = `🔥 *RELATÓRIO DIÁRIO - ESPORTE TIPS PRO* 🔥\n\n`;
+  
+  palpitesGerados.forEach(p => {
+    mensagem += `⚽ *${p.matchName}* (${p.league})\n` +
+      `🎯 *Principal:* ${p.market} (@${p.odd} - ${p.confidence}% Confiança)\n` +
+      `⚡ *Criar Aposta:* ${p.criarApostaMarket} (@${p.criarApostaOdd})\n` +
+      `⭐ *Player Prop:* ${p.playerBetMarket} (@${p.playerBetOdd})\n\n`;
+  });
+
+  mensagem += `📊 *Acesse o painel web para ver as análises completas!*`;
+
+  try {
+    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    
+    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        From: `whatsapp:${fromNumber}`,
+        To: `whatsapp:${toNumber}`,
+        Body: mensagem
+      })
+    });
+  } catch (err) {
+    console.error("Erro ao enviar mensagem para o WhatsApp:", err);
+  }
 }
 
 module.exports = async function handler(req, res) {
   const apiFootballKey = process.env.FOOTBALL_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
+  
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+  const meuCelular = process.env.MEU_CELULAR;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
   if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key da Football-API" });
@@ -121,6 +166,7 @@ module.exports = async function handler(req, res) {
     }
 
     let salvos = 0;
+    let listaParaWhatsapp = [];
 
     for (const item of matches) {
       const fixtureId = item.fixture.id;
@@ -133,7 +179,7 @@ module.exports = async function handler(req, res) {
       try {
         ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
       } catch (errAI) {
-        console.error(`Erro na IA para ${home} vs ${away}:`, errAI.message);
+        console.error(`❌ Erro de parsing/IA para ${home} vs ${away}:`, errAI.message);
         continue; 
       }
 
@@ -170,12 +216,17 @@ module.exports = async function handler(req, res) {
       };
 
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
+      listaParaWhatsapp.push(docData);
       salvos++;
       
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos gerados por IA!` });
+    if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
+      await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
+    }
+
+    return res.status(200).json({ success: true, message: `Painel atualizado com ${salvos} jogos gerados 100% por IA!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
