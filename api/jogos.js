@@ -12,18 +12,8 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-const LIGAS_DE_ELITE_IDS = [
-  71, 72, 73,       // Brasil
-  39, 40,           // Inglaterra
-  140, 141, 143,    // Espanha
-  135, 136, 137,    // Itália
-  78, 79, 81,       // Alemanha
-  61, 62,           // França
-  2, 3, 848, 13, 11 // Internacionais
-];
-
-async function buscarJogosDoDia(apiFootballKey) {
-  // Data exata de hoje no Brasil formatada de forma 100% segura para API
+async function buscarJogosDoDia(footballDataKey) {
+  // Data exata de hoje no Brasil formatada no padrão YYYY-MM-DD
   const agora = new Date();
   const options = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
   const partes = new Intl.DateTimeFormat('en-CA', options).formatToParts(agora);
@@ -32,48 +22,24 @@ async function buscarJogosDoDia(apiFootballKey) {
   const dia = partes.find(p => p.type === 'day').value;
   const hoje = `${ano}-${mes}-${dia}`;
   
-  console.log("Buscando jogos para a data:", hoje);
+  console.log("Buscando jogos na football-data.org para a data:", hoje);
 
-  const res = await fetch(`https://v3.football.api-sports.io/fixtures?date=${hoje}&timezone=America/Sao_Paulo`, { 
-    headers: { 'x-apisports-key': apiFootballKey } 
+  const res = await fetch(`https://api.football-data.org/v4/matches?date=${hoje}`, { 
+    headers: { 'X-Auth-Token': footballDataKey } 
   });
   
   if (!res.ok) {
-    throw new Error(`Erro HTTP da API-Football: ${res.status}`);
+    throw new Error(`Erro HTTP da football-data.org: ${res.status}`);
   }
   
   const data = await res.json();
   
-  if (data.errors && Object.keys(data.errors).length > 0) {
-    throw new Error(`Erro retornado pela API-Football: ${JSON.stringify(data.errors)}`);
-  }
-
-  if (!data.response || data.response.length === 0) {
+  if (!data.matches || data.matches.length === 0) {
     return [];
   }
-  
-  let jogosFiltrados = data.response.filter(item => 
-    LIGAS_DE_ELITE_IDS.includes(item.league.id) && item.league.id !== 45
-  );
 
-  // Rede de segurança: se a elite estrita não retornar nada, pega os jogos profissionais do dia
-  if (jogosFiltrados.length === 0) {
-    jogosFiltrados = data.response.filter(item => item.league.id !== 45);
-  }
-  
-  const prioridadeLigas = {
-    71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
-    73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
-    72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
-  };
-
-  jogosFiltrados.sort((a, b) => {
-    const pA = prioridadeLigas[a.league.id] || 99;
-    const pB = prioridadeLigas[b.league.id] || 99;
-    return pA - pB;
-  });
-
-  return jogosFiltrados.slice(0, 5);
+  // Pega até 5 partidas do dia para garantir velocidade e assertividade
+  return data.matches.slice(0, 5);
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
@@ -86,10 +52,8 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   REGRAS ABSOLUTAS:
-  1. É OBRIGATÓRIO citar o nome e sobrenome real de um jogador titular específico que atua em ${home} ou ${away} (Ex: Kylian Mbappé, Harry Kane, etc.). Proibido usar "Destaque" ou termos genéricos.
-  2. No campo "playerBetMarket", crie um Especial Combinado focado nesse jogador (Ex: "Especiais: [Nome Real] 1+ Finalização no Alvo + Vitória").
-  3. No campo "playerBetOdd", insira um valor decimal realista (ex: 2.15).
-
+  1. Foque com extrema qualidade na Entrada Principal e no Criar Aposta baseados em estatísticas reais do confronto.
+  
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
@@ -99,9 +63,6 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "criarApostaMarket": "Criar Aposta: Combinada específica",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa técnica.",
-    "playerBetMarket": "Especiais: [Nome Real do Jogador] + Aposta",
-    "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Justificativa tática focada no atleta.",
     "refereeNote": "Análise do árbitro ${referee}",
     "rivalryNote": "Contexto histórico ou tabela",
     "injuryNote": "Panorama de desfalques"
@@ -123,30 +84,31 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
 }
 
 module.exports = async function handler(req, res) {
-  const apiFootballKey = process.env.FOOTBALL_API_KEY;
+  // Utiliza a chave enviada ou busca nas variáveis de ambiente da Vercel
+  const footballDataKey = process.env.FOOTBALL_DATA_KEY || 'f8928c309caf420b9cfab4a8a906de73';
   const geminiApiKey = process.env.GEMINI_API_KEY;
   
   if (!geminiApiKey) return res.status(500).json({ success: false, error: "Falta API Key do Gemini" });
-  if (!apiFootballKey) return res.status(500).json({ success: false, error: "Falta API Key da Football-API" });
+  if (!footballDataKey) return res.status(500).json({ success: false, error: "Falta API Key da football-data.org" });
 
   try {
-    const matches = await buscarJogosDoDia(apiFootballKey);
+    const matches = await buscarJogosDoDia(footballDataKey);
     
     if (!matches || matches.length === 0) {
        return res.status(200).json({ 
          success: false, 
-         message: "A API-Football retornou zero jogos para a data de hoje. Verifique se o limite de cotas diárias da API foi atingido." 
+         message: "A football-data.org retornou zero jogos para a data de hoje." 
        });
     }
 
     let salvos = 0;
 
     for (const item of matches) {
-      const fixtureId = item.fixture.id;
-      const home = item.teams.home.name;
-      const away = item.teams.away.name;
-      const league = item.league.name;
-      const referee = item.fixture.referee || "Árbitro Oficial";
+      const matchId = item.id;
+      const home = item.homeTeam.name;
+      const away = item.awayTeam.name;
+      const league = item.competition.name;
+      const referee = (item.referees && item.referees[0] && item.referees[0].name) || "Árbitro Oficial";
 
       let ai;
       try {
@@ -161,7 +123,7 @@ module.exports = async function handler(req, res) {
       const docData = {
         matchName: `${home} vs ${away}`,
         league,
-        country: item.league.country || "Internacional",
+        country: item.competition.area?.name || "Internacional",
         market: ai.mainMarket,
         odd: oddPrincipal,
         confidence: Number(ai.mainConfidence) || 85,
@@ -169,11 +131,8 @@ module.exports = async function handler(req, res) {
         criarApostaMarket: ai.criarApostaMarket,
         criarApostaOdd: Number(ai.criarApostaOdd) || 1.95,
         criarApostaAnalysis: ai.criarApostaAnalysis,
-        playerBetMarket: ai.playerBetMarket,
-        playerBetOdd: Number(ai.playerBetOdd) || 2.10,
-        playerBetAnalysis: ai.playerBetAnalysis,
         bookmaker: "Bet365",
-        matchDate: item.fixture.date,
+        matchDate: item.utcDate,
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
           Betano: (oddPrincipal * 0.99).toFixed(2),
@@ -188,13 +147,13 @@ module.exports = async function handler(req, res) {
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
-      await db.collection('predictions').doc(String(fixtureId)).set(docData);
+      await db.collection('predictions').doc(String(matchId)).set(docData);
       salvos++;
       
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos de hoje gravados no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! ${salvos} jogos gravados no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
