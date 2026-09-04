@@ -35,13 +35,31 @@ async function buscarJogosDoDia(apiFootballKey) {
       const data = await res.json();
       if (data.response && data.response.length > 0) {
         console.log(`Total de jogos na API hoje: ${data.response.length}`);
-        
         const jogosFiltrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
         
-        console.log(`Jogos que passaram no filtro de elite/copas: ${jogosFiltrados.length}`);
+        // TABELA DE PESOS: Quanto menor o número, maior a prioridade no painel
+        const prioridadeLigas = {
+          // Peso 1: 1ª Divisão / Principais Continentais (Máxima Prioridade)
+          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
+          
+          // Peso 2: Copas Nacionais e Outras Continentais (Prioridade Média)
+          73: 2, 45: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
+          
+          // Peso 3: Séries B / Segunda Divisão (Prioridade Menor)
+          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
+        };
+
+        // Ordena os jogos do dia baseando-se na tabela de pesos acima
+        jogosFiltrados.sort((a, b) => {
+          const pA = prioridadeLigas[a.league.id] || 99;
+          const pB = prioridadeLigas[b.league.id] || 99;
+          return pA - pB;
+        });
+
+        console.log(`Jogos ordenados por prioridade de elite: ${jogosFiltrados.length}`);
         
         if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 10); 
+          return jogosFiltrados.slice(0, 10); // Pega os 10 primeiros já priorizando a elite!
         }
       }
     }
@@ -49,22 +67,70 @@ async function buscarJogosDoDia(apiFootballKey) {
     console.log("Erro ao buscar fixtures na API-Football:", e);
   }
 
-  return []; // Retorna vazio se não houver jogos hoje nessas ligas
+  return [];
 }
 
-async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
+
+// BUSCA DADOS REAIS E JOGADORES DIRETO DA API DE ODDS
+async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
+  try {
+    const response = await fetch(`https://v3.football.api-sports.io/odds?fixture=${fixtureId}`, { 
+      headers: { 'x-apisports-key': apiFootballKey } 
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.response || data.response.length === 0) return null;
+
+    const bookmakers = data.response[0].bookmakers || [];
+    const casasAlvo = ["Bet365", "Betano", "Superbet"];
+    let bk = bookmakers.find(b => casasAlvo.some(casa => b.name.toLowerCase().includes(casa.toLowerCase()))) || bookmakers[0];
+
+    let jogadoresExtraidos = [];
+
+    if (bk && bk.bets) {
+      bk.bets.forEach(b => {
+        const nomeM = b.name.toLowerCase();
+        // Procura mercados de jogadores (chutes, artilheiros, etc.)
+        if (nomeM.includes('player') || nomeM.includes('scorer') || nomeM.includes('shots') || nomeM.includes('target')) {
+          b.values.forEach(v => {
+            if (v.value && v.value.length > 3 && !v.value.toLowerCase().includes('yes') && !v.value.toLowerCase().includes('no')) {
+              jogadoresExtraidos.push({ mercado: b.name, jogador: v.value, odd: v.odd });
+            }
+          });
+        }
+      });
+    }
+
+    return { 
+      bookmaker: bk ? bk.name : "Bet365", 
+      jogadoresExtraidos 
+    };
+  } catch (e) { 
+    return null; 
+  }
+}
+
+async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
-  // Mantido o seu modelo original que está rodando perfeitamente
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
+  let contextoJogadores = "";
+  if (dadosOdds && dadosOdds.jogadoresExtraidos.length > 0) {
+    const listaNomes = dadosOdds.jogadoresExtraidos.slice(0, 8).map(j => `${j.jogador} (${j.mercado} @${j.odd})`).join(', ');
+    contextoJogadores = `ATENÇÃO: Use obrigatoriamente estes jogadores reais listados pela casa de apostas para este jogo: [ ${listaNomes} ]. NUNCA invente nomes genéricos.`;
+  } else {
+    contextoJogadores = `Certifique-se de citar nomes reais e corretos de atletas titulares que atuam atualmente em ${home} ou ${away}.`;
+  }
+
   const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
+  ${contextoJogadores}
   
   REGRAS ABSOLUTAS:
-  1. No campo "playerBetMarket", cite obrigatoriamente um nome real de um jogador titular de ${home} ou ${away} seguido de uma linha de aposta (Ex: "Gabigol 1+ Chute ao Alvo"). NUNCA deixe genérico.
-  2. No campo "playerBetOdd", insira um valor numérico decimal válido (ex: 2.10).
+  1. No campo "playerBetMarket", crie um **Criar Aposta / Especial Combinado de Jogador** mais encorpado (Ex: "Especiais: [Nome Real do Jogador] 1+ Chute ao Alvo + Vitória do ${home} ou Empate"). Nunca use apenas uma linha simples se puder agregar valor, e NUNCA deixe genérico.
+  2. No campo "playerBetOdd", insira um valor numérico decimal válido (ex: 2.15).
 
   Retorne estritamente um JSON válido com esta estrutura exata:
   {
@@ -75,9 +141,9 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "criarApostaMarket": "Criar Aposta: [Combinada de equipe]",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa técnica curta.",
-    "playerBetMarket": "Especiais: [Nome Real do Jogador] 1+ Chute ao Alvo",
+    "playerBetMarket": "Especiais: [Nome Real do Jogador] [Sua aposta combinada focada no atleta]",
     "playerBetOdd": 2.15,
-    "playerBetAnalysis": "Justificativa tática baseada no atleta.",
+    "playerBetAnalysis": "Justificativa tática detalhada baseada no desempenho recente do atleta.",
     "refereeNote": "Impacto disciplinar do árbitro",
     "rivalryNote": "Contexto histórico ou de tabela",
     "injuryNote": "Panorama de desfalques"
@@ -135,7 +201,6 @@ module.exports = async function handler(req, res) {
   try {
     const matches = await buscarJogosDoDia(apiFootballKey);
     
-    // Trava de segurança:
     if (!matches || matches.length === 0) {
        return res.status(200).json({ success: true, message: "Nenhum jogo das ligas de elite/copas encontrado para a data de hoje." });
     }
@@ -150,9 +215,12 @@ module.exports = async function handler(req, res) {
       const league = item.league.name;
       const referee = item.fixture.referee || "Árbitro Oficial";
 
+      // Busca dados avançados de odds e jogadores reais antes de chamar a IA
+      const dadosOdds = await buscarDadosAvancadosFixture(fixtureId, apiFootballKey);
+
       let ai;
       try {
-        ai = await gerarPalpiteIA(home, away, league, referee, geminiApiKey);
+        ai = await gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiApiKey);
       } catch (errAI) {
         ai = {
           mainMarket: "Ambas as Equipes Marcam",
@@ -162,9 +230,9 @@ module.exports = async function handler(req, res) {
           criarApostaMarket: `Criar Aposta: ${home} ou Empate + Mais de 1.5 Gols`,
           criarApostaOdd: 1.92,
           criarApostaAnalysis: "Mandante forte e necessidade de vitória.",
-          playerBetMarket: "Especiais: Atleta Principal 1+ Finalização no Alvo",
+          playerBetMarket: "Especiais: Atleta Principal 1+ Finalização no Alvo + Time Vence",
           playerBetOdd: 2.10,
-          playerBetAnalysis: "Boa média de finalizações recentes.",
+          playerBetAnalysis: "Boa média de finalizações recentes do principal nome ofensivo.",
           refereeNote: "Arbitragem equilibrada.",
           rivalryNote: "Disputa importante na tabela.",
           injuryNote: "Elencos disponíveis."
@@ -187,7 +255,7 @@ module.exports = async function handler(req, res) {
         playerBetMarket: ai.playerBetMarket,
         playerBetOdd: Number(ai.playerBetOdd) || 2.10,
         playerBetAnalysis: ai.playerBetAnalysis,
-        bookmaker: "Bet365",
+        bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365",
         matchDate: item.fixture.date,
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
@@ -206,7 +274,9 @@ module.exports = async function handler(req, res) {
       await db.collection('predictions').doc(String(fixtureId)).set(docData);
       listaParaWhatsapp.push(docData);
       salvos++;
-      await new Promise(r => setTimeout(r, 1200));
+      
+      // PAUSA DE SEGURANÇA AUMENTADA PARA 3 SEGUNDOS (Evita travar a IA e cair no fallback)
+      await new Promise(r => setTimeout(r, 3000));
     }
 
     if (twilioSid && twilioToken && twilioPhone && meuCelular && listaParaWhatsapp.length > 0) {
