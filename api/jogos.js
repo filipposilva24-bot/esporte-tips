@@ -12,15 +12,15 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// LISTA COMPLETA: Elite, Séries B principais e Copas Nacionais/Continentais
+// LISTA REFINADA: Apenas Elite, Séries B principais e Grandes Copas/Continentais (Sem copas amadoras)
 const LIGAS_DE_ELITE_IDS = [
-  71, 72, 73,       // Brasil
-  39, 40, 45,       // Inglaterra
-  140, 141, 143,    // Espanha
-  135, 136, 137,    // Itália
-  78, 79, 81,       // Alemanha
-  61, 62,           // França
-  2, 3, 848, 13, 11 // Internacionais
+  71, 72, 73,       // Brasil (Série A, Série B, Copa do Brasil)
+  39, 40,           // Inglaterra (Premier League, Championship - FA Cup removida por falta de dados)
+  140, 141, 143,    // Espanha (La Liga, La Liga 2, Copa del Rey)
+  135, 136, 137,    // Itália (Serie A, Serie B, Coppa Italia)
+  78, 79, 81,       // Alemanha (Bundesliga, 2. Bundesliga, DFB Pokal)
+  61, 62,           // França (Ligue 1, Ligue 2)
+  2, 3, 848, 13, 11 // Internacionais (Champions, Europa, Conference, Libertadores, Sul-Americana)
 ];
 
 async function buscarJogosDoDia(apiFootballKey) {
@@ -37,29 +37,23 @@ async function buscarJogosDoDia(apiFootballKey) {
         console.log(`Total de jogos na API hoje: ${data.response.length}`);
         const jogosFiltrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
         
-        // TABELA DE PESOS RIGOROSA: 1ª Divisão (1) -> Copas (2) -> Séries B (3)
+        // TABELA DE PESOS RIGOROSA: 1ª Divisão (1) -> Copas Profissionais (2) -> Séries B (3)
         const prioridadeLigas = {
-          // Peso 1: 1ª Divisão e Continentais Principais
-          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1,
-          
-          // Peso 2: Copas Nacionais e Outras Continentais
-          73: 2, 45: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,
-          
-          // Peso 3: Séries B / Segunda Divisão
-          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3
+          71: 1, 39: 1, 140: 1, 135: 1, 78: 1, 61: 1, 2: 1, 13: 1, // Elite & Continentais
+          73: 2, 143: 2, 137: 2, 81: 2, 3: 2, 848: 2, 11: 2,       // Copas Nacionais
+          72: 3, 40: 3, 141: 3, 136: 3, 79: 3, 62: 3              // Séries B
         };
 
-        // Ordena aplicando estritamente a prioridade definida acima
         jogosFiltrados.sort((a, b) => {
           const pA = prioridadeLigas[a.league.id] || 99;
           const pB = prioridadeLigas[b.league.id] || 99;
           return pA - pB;
         });
 
-        console.log(`Jogos ordenados por prioridade: ${jogosFiltrados.length}`);
+        console.log(`Jogos ordenados por prioridade de elite: ${jogosFiltrados.length}`);
         
         if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 10); // Pega estritamente os 10 primeiros do topo da prioridade
+          return jogosFiltrados.slice(0, 10); // Pega até 10 jogos do topo da prioridade
         }
       }
     }
@@ -109,29 +103,22 @@ async function buscarDadosAvancadosFixture(fixtureId, apiFootballKey) {
 
 async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
-
-  let contextoJogadores = "";
-  if (dadosOdds && dadosOdds.jogadoresExtraidos.length > 0) {
-    const listaNomes = dadosOdds.jogadoresExtraidos.slice(0, 8).map(j => `${j.jogador} (${j.mercado} @${j.odd})`).join(', ');
-    contextoJogadores = `ATENÇÃO: Utilize preferencialmente jogadores reais listados para esta partida: [ ${listaNomes} ].`;
-  } else {
-    contextoJogadores = `Cite nomes reais de atletas titulares que atuam em ${home} ou ${away}.`;
-  }
+  const listaNomes = dadosOdds.jogadoresExtraidos.slice(0, 10).map(j => `${j.jogador} (${j.mercado} @${j.odd})`).join(', ');
 
   const prompt = `Você é um Tipster Profissional de Elite. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
-  ${contextoJogadores}
+  JOGADORES REAIS DISPONÍVEIS NAS CASAS DE APOSTAS PARA ESTE JOGO: [ ${listaNomes} ].
   
   REGRAS ABSOLUTAS:
-  1. Crie análises, mercados e odds ÚNICAS e VARIADAS baseadas nas características reais dos times ${home} e ${away}. NUNCA repita padrões genéricos.
-  2. No campo "playerBetMarket", crie um Especial Combinado de Jogador detalhado citando o nome real de um atleta.
-  3. No campo "playerBetOdd", insira um valor numérico decimal válido (ex: 2.15).
+  1. Crie análises, mercados e odds 100% ÚNICAS e VARIADAS baseadas nas características reais de ${home} e ${away}.
+  2. No campo "playerBetMarket", escolha obrigatoriamente um jogador real da lista acima e crie um Especial Combinado de Jogador detalhado.
+  3. No campo "playerBetOdd", insira um valor numérico decimal válido baseado nos dados ou realista (ex: 2.15).
 
-  Retorne EXATAMENTE um JSON puro (sem marcações markdown tipo \`\`\`json) com esta estrutura exata:
+  Retorne EXATAMENTE um JSON puro (sem markdown, sem \`\`\`json) com esta estrutura exata:
   {
     "mainMarket": "Mercado principal específico",
     "mainOdd": 1.88,
@@ -140,7 +127,7 @@ async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey)
     "criarApostaMarket": "Criar Aposta: [Combinada específica da partida]",
     "criarApostaOdd": 1.95,
     "criarApostaAnalysis": "Justificativa técnica da aposta combinada.",
-    "playerBetMarket": "Especiais: [Nome Real do Jogador] [Aposta combinada focada no atleta]",
+    "playerBetMarket": "Especiais: [Nome Real do Atleta] [Aposta combinada focada no atleta]",
     "playerBetOdd": 2.15,
     "playerBetAnalysis": "Justificativa tática detalhada do desempenho do atleta.",
     "refereeNote": "Análise específica do impacto do árbitro ${referee}",
@@ -150,8 +137,6 @@ async function gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiKey)
 
   const result = await model.generateContent(prompt);
   let textResponse = result.response.text();
-
-  // Limpeza de segurança para remover qualquer bloco markdown indesejado
   textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
   return JSON.parse(textResponse);
@@ -219,30 +204,22 @@ module.exports = async function handler(req, res) {
       const league = item.league.name;
       const referee = item.fixture.referee || "Árbitro Oficial";
 
+      // 1. BUSCA DADOS DE ODDS E JOGADORES REAIS
       const dadosOdds = await buscarDadosAvancadosFixture(fixtureId, apiFootballKey);
 
+      // 2. TRAVA ANTI-LIXO: Se a partida não tiver dados de jogadores/odds na API, IGNORA O JOGO COMPLETAMENTE.
+      if (!dadosOdds || !dadosOdds.jogadoresExtraidos || dadosOdds.jogadoresExtraidos.length === 0) {
+        console.log(`⚠️ Jogo ${home} vs ${away} ignorado por falta de dados avançados na API.`);
+        continue; 
+      }
+
+      // 3. GERA O PALPITE COM A IA USANDO OS DADOS REAIS
       let ai;
       try {
         ai = await gerarPalpiteIA(home, away, league, referee, dadosOdds, geminiApiKey);
       } catch (errAI) {
-        // Mostra o erro exato no console da Vercel para sabermos se houver nova falha
-        console.error(`❌ Erro real na IA para ${home} vs ${away}:`, errAI.message);
-        
-        ai = {
-          mainMarket: `Vitória ou Empate: ${home}`,
-          mainOdd: 1.85,
-          mainConfidence: 82,
-          mainAnalysis: `Análise tática para o duelo entre ${home} e ${away}.`,
-          criarApostaMarket: `Criar Aposta: ${home} + Mais de 1.5 Gols`,
-          criarApostaOdd: 1.95,
-          criarApostaAnalysis: "Expectativa de forte pressão dos mandantes.",
-          playerBetMarket: `Especiais: Destaque de ${home} 1+ Finalização no Alvo`,
-          playerBetOdd: 2.10,
-          playerBetAnalysis: "Atleta com alta incidência de finalizações na temporada.",
-          refereeNote: `Atuação de ${referee} exigirá controle disciplinar rápido.`,
-          rivalryNote: "Partida de grande importância na tabela de classificação.",
-          injuryNote: "Escalações definidas pelas comissões técnicas."
-        };
+        console.error(`❌ Erro na IA para ${home} vs ${away}, ignorando este jogo:`, errAI.message);
+        continue; // Se der qualquer erro na IA, pula o jogo em vez de salvar dados genéricos
       }
 
       const oddPrincipal = Number(ai.mainOdd) || 1.85;
@@ -261,7 +238,7 @@ module.exports = async function handler(req, res) {
         playerBetMarket: ai.playerBetMarket,
         playerBetOdd: Number(ai.playerBetOdd) || 2.10,
         playerBetAnalysis: ai.playerBetAnalysis,
-        bookmaker: dadosOdds ? dadosOdds.bookmaker : "Bet365",
+        bookmaker: dadosOdds.bookmaker,
         matchDate: item.fixture.date,
         comparadorOdds: {
           Bet365: (oddPrincipal * 1.01).toFixed(2),
@@ -281,6 +258,7 @@ module.exports = async function handler(req, res) {
       listaParaWhatsapp.push(docData);
       salvos++;
       
+      // Pausa de 3 segundos entre os jogos profissionais
       await new Promise(r => setTimeout(r, 3000));
     }
 
@@ -288,7 +266,7 @@ module.exports = async function handler(req, res) {
       await enviarResumoWhatsApp(twilioSid, twilioToken, twilioPhone, meuCelular, listaParaWhatsapp);
     }
 
-    return res.status(200).json({ success: true, message: `Painel atualizado e mensagem enviada no WhatsApp! ${salvos} jogos processados.` });
+    return res.status(200).json({ success: true, message: `Painel atualizado! ${salvos} jogos profissionais processados com sucesso.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
