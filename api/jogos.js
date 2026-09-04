@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 if (!admin.apps.length) {
   try {
@@ -33,6 +34,12 @@ async function buscarJogosDoDia(footballDataKey) {
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-pro", 
+    generationConfig: { responseMimeType: "application/json" } 
+  });
+
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
@@ -49,45 +56,19 @@ async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
     "injuryNote": "Panorama de desfalques"
   }`;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
+  const result => await model.generateContent(prompt);
+  let textResponse = result.response.text();
+  textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
 
-  if (!response.ok) {
-    const responsePro = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    });
-    
-    if (!responsePro.ok) {
-      const errText = await responsePro.text();
-      throw new Error(`Erro na API do Gemini: ${responsePro.status} - ${errText}`);
+  try {
+    return JSON.parse(textResponse);
+  } catch (e) {
+    const match = textResponse.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
     }
-    
-    const dataPro = await responsePro.json();
-    const textPro = dataPro.candidates[0].content.parts[0].text;
-    let cleanPro = textPro.replace(/```json/g, '').replace(/```/g, '').trim();
-    const matchPro = cleanPro.match(/\{[\s\S]*\}/);
-    return matchPro ? JSON.parse(matchPro[0]) : JSON.parse(cleanPro);
+    throw e;
   }
-
-  const data = await response.json();
-  const textResponse = data.candidates[0].content.parts[0].text;
-  
-  let cleanText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-  const match = cleanText.match(/\{[\s\S]*\}/);
-  if (match) {
-    return JSON.parse(match[0]);
-  }
-  return JSON.parse(cleanText);
 }
 
 module.exports = async function handler(req, res) {
