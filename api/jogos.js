@@ -33,6 +33,25 @@ async function buscarJogosDoDia(footballDataKey) {
 }
 
 async function gerarPalpiteIA(home, away, league, referee, groqKey) {
+  // BUSCA AUTOMATICAMENTE QUAL MODELO ESTÁ ATIVO NA SUA CONTA AGORA
+  let modelName = "llama-3.3-70b-versatile"; 
+  try {
+    const modelRes = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { 'Authorization': `Bearer ${groqKey}` }
+    });
+    if (modelRes.ok) {
+      const modelData = await modelRes.json();
+      if (modelData && modelData.data && modelData.data.length > 0) {
+        const activeModel = modelData.data.find(m => m.id.includes('llama') || m.id.includes('mixtral') || m.id.includes('gemma'));
+        if (activeModel) {
+          modelName = activeModel.id;
+        }
+      }
+    }
+  } catch (e) {
+    console.log("Usando fallback de modelo padrão");
+  }
+
   const prompt = `Você é um Tipster Profissional de Elite especialista em análise de futebol. Jogo: ${home} vs ${away} (${league}). Árbitro: ${referee}.
   
   Retorne EXATAMENTE um JSON puro sem markdown com esta estrutura exata:
@@ -56,7 +75,7 @@ async function gerarPalpiteIA(home, away, league, referee, groqKey) {
       'Authorization': `Bearer ${groqKey}`
     },
     body: JSON.stringify({
-      model: "llama3-8b-8192",
+      model: modelName,
       messages: [
         { role: "system", content: "Você é um analista esportivo profissional que retorna estritamente JSON válido." },
         { role: "user", content: prompt }
@@ -67,7 +86,7 @@ async function gerarPalpiteIA(home, away, league, referee, groqKey) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Erro na API do Groq (${response.status}): ${errText}`);
+    throw new Error(`Erro na API do Groq usando o modelo [${modelName}]: ${errText}`);
   }
 
   const data = await response.json();
@@ -127,7 +146,7 @@ module.exports = async function handler(req, res) {
 
     await db.collection('predictions').doc(String(matchId)).set(docData);
 
-    return res.status(200).json({ success: true, message: `Painel atualizado via Groq com sucesso! Jogo salvo no Firebase!` });
+    return res.status(200).json({ success: true, message: `Painel atualizado com sucesso! Jogo gerado e salvo no Firebase!` });
   } catch (err) {
     return res.status(500).json({ success: false, erroCritico: err.message });
   }
