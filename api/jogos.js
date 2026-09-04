@@ -34,16 +34,14 @@ async function buscarJogosDoDia(apiFootballKey) {
     if (res.ok) {
       const data = await res.json();
       if (data.response && data.response.length > 0) {
-        // Log para você inspecionar no console da Vercel quais ligas vieram hoje da API
         console.log(`Total de jogos na API hoje: ${data.response.length}`);
         
-        // Filtra estritamente pelos IDs das principais ligas e copas
         const jogosFiltrados = data.response.filter(item => LIGAS_DE_ELITE_IDS.includes(item.league.id));
         
         console.log(`Jogos que passaram no filtro de elite/copas: ${jogosFiltrados.length}`);
         
         if (jogosFiltrados.length > 0) {
-          return jogosFiltrados.slice(0, 5); // Pega até 5 jogos para processar
+          return jogosFiltrados.slice(0, 5); 
         }
       }
     }
@@ -51,34 +49,12 @@ async function buscarJogosDoDia(apiFootballKey) {
     console.log("Erro ao buscar fixtures na API-Football:", e);
   }
 
-  return []; // Retorna vazio se não houver jogos hoje nessas ligas (evitando o fallback fictício para você ver exatamente o que a API tem)
-}
-
-
-  // Fallback Defensivo Automático
-  console.log("⚠️ Ativando fallback defensivo para manter o painel alimentado.");
-  const nowIso = new Date().toISOString();
-  return [
-    {
-      fixture: { id: 9101, date: nowIso, referee: "Wilton Pereira Sampaio" },
-      teams: { home: { name: "Flamengo" }, away: { name: "Palmeiras" } },
-      league: { id: 71, name: "Série A - Brasil", country: "Brazil" }
-    },
-    {
-      fixture: { id: 9102, date: nowIso, referee: "Clément Turpin" },
-      teams: { home: { name: "Real Madrid" }, away: { name: "Barcelona" } },
-      league: { id: 140, name: "La Liga", country: "Spain" }
-    },
-    {
-      fixture: { id: 9103, date: nowIso, referee: "Michael Oliver" },
-      teams: { home: { name: "Manchester City" }, away: { name: "Arsenal" } },
-      league: { id: 39, name: "Premier League", country: "England" }
-    }
-  ];
+  return []; // Retorna vazio se não houver jogos hoje nessas ligas
 }
 
 async function gerarPalpiteIA(home, away, league, referee, geminiKey) {
   const genAI = new GoogleGenerativeAI(geminiKey);
+  // Mantido o seu modelo original que está rodando perfeitamente
   const model = genAI.getGenerativeModel({ 
     model: "gemini-3.6-flash", 
     generationConfig: { responseMimeType: "application/json" } 
@@ -158,6 +134,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const matches = await buscarJogosDoDia(apiFootballKey);
+    
+    // Trava de segurança:
+    if (!matches || matches.length === 0) {
+       return res.status(200).json({ success: true, message: "Nenhum jogo das ligas de elite/copas encontrado para a data de hoje." });
+    }
+
     let salvos = 0;
     let listaParaWhatsapp = [];
 
