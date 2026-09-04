@@ -33,7 +33,7 @@ async function buscarJogosDoDia(footballDataKey) {
 }
 
 async function gerarPalpiteIA(home, away, league, referee, groqKey) {
-  // BUSCA AUTOMATICAMENTE QUAL MODELO ESTÁ ATIVO NA SUA CONTA AGORA
+  // FILTRA INTELIGENTEMENTE APENAS MODELOS DE CHAT VÁLIDOS (IGNORANDO GUARDS E EMBEDDINGS)
   let modelName = "llama-3.3-70b-versatile"; 
   try {
     const modelRes = await fetch("https://api.groq.com/openai/v1/models", {
@@ -42,9 +42,15 @@ async function gerarPalpiteIA(home, away, league, referee, groqKey) {
     if (modelRes.ok) {
       const modelData = await modelRes.json();
       if (modelData && modelData.data && modelData.data.length > 0) {
-        const activeModel = modelData.data.find(m => m.id.includes('llama') || m.id.includes('mixtral') || m.id.includes('gemma'));
-        if (activeModel) {
-          modelName = activeModel.id;
+        const validChatModels = modelData.data.filter(m => 
+          (m.id.includes('llama') || m.id.includes('mixtral') || m.id.includes('gemma')) && 
+          !m.id.includes('guard') && 
+          !m.id.includes('whisper') && 
+          !m.id.includes('embed') &&
+          !m.id.includes('vision')
+        );
+        if (validChatModels.length > 0) {
+          modelName = validChatModels[0].id;
         }
       }
     }
